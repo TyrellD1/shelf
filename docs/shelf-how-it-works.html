@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; media-src data:; base-uri 'none'; form-action 'none'">
+  <script>
+    (() => {
+      let saved;
+      try { saved = localStorage.getItem("html-theme"); } catch {}
+      const preference = saved === "light" || saved === "dark" ? saved : "system";
+      document.documentElement.dataset.themePreference = preference;
+      document.documentElement.dataset.theme = preference === "system"
+        ? matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+        : preference;
+    })();
+  </script>
+  <title>Shelf — how it works</title>
+  <meta name="description" content="A local-first shelf for HTML written by agents: the CLI, the desktop app, and the PWA.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23222222'/%3E%3Cpath d='M8 11h16M8 16h16M8 21h10' fill='none' stroke='white' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E">
+  <style>
+    /* /html tokens, plus the deck chrome. Slide type is in cqw of the 16:9 canvas. */
+    :root {
+      --page: #ffffff;
+      --ink: #242424;
+      --muted: #686868;
+      --quiet: #767676;
+      --line: #e4e4e4;
+      --surface: #f7f7f7;
+      --surface-deep: #ededed;
+      --strong: #2c2c2c;
+      --series-main: #303030;
+      --series-secondary: #929292;
+      --series-bar: #bcbcbc;
+      --table-rule: #bdbdbd;
+      --selection: #dedede;
+      --selection-ink: #161616;
+      --diagram-node: #ffffff;
+      --diagram-strong: #303030;
+      --diagram-border: #b4b4b4;
+      --diagram-emphasis-border: #a0a0a0;
+      --diagram-decision: #e9e9e9;
+      --diagram-connector: #767676;
+      --diagram-secondary: #999999;
+      --diagram-lifeline: #c2c2c2;
+      --diagram-label-wash: rgba(247, 247, 247, .5);
+      --diagram-shadow: rgba(0, 0, 0, .2);
+      --diagram-shadow-strong: rgba(0, 0, 0, .4);
+      --chrome: #ececec;
+      color-scheme: light;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --radius: 8px;
+    }
+    :root[data-theme="dark"] {
+      --page: #171717;
+      --ink: #e6e6e6;
+      --muted: #adadad;
+      --quiet: #999999;
+      --line: #353535;
+      --surface: #202020;
+      --surface-deep: #2c2c2c;
+      --strong: #d9d9d9;
+      --series-main: #e0e0e0;
+      --series-secondary: #8f8f8f;
+      --series-bar: #747474;
+      --table-rule: #626262;
+      --selection: #505050;
+      --selection-ink: #ffffff;
+      --diagram-node: #202020;
+      --diagram-strong: #dedede;
+      --diagram-border: #666666;
+      --diagram-emphasis-border: #808080;
+      --diagram-decision: #363636;
+      --diagram-connector: #a0a0a0;
+      --diagram-secondary: #999999;
+      --diagram-lifeline: #5c5c5c;
+      --diagram-label-wash: rgba(32, 32, 32, .8);
+      --chrome: #101010;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      height: 100dvh;
+      overflow: hidden;
+      background: var(--chrome);
+      color: var(--ink);
+      font-family: var(--font);
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: var(--selection); color: var(--selection-ink); }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+    button { font: inherit; color: inherit; }
+    .app { display: flex; height: 100%; min-height: 0; }
+    .rail {
+      width: 292px;
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-right: 1px solid var(--line);
+      background: var(--chrome);
+      user-select: none;
+    }
+    .thumbs {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 16px 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--line) transparent;
+    }
+    .thumb {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      column-gap: 10px;
+      align-items: start;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+      cursor: pointer;
+    }
+    .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1;
+      padding-top: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+    .thumb[aria-current="true"] { color: var(--ink); }
+    .thumb-frame {
+      position: relative;
+      display: block;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      border-radius: var(--radius);
+      background: var(--page);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .thumb[aria-current="true"] .thumb-frame {
+      box-shadow: 0 0 0 2px var(--chrome), 0 0 0 4px var(--ink);
+    }
+    .thumb:hover .thumb-frame { box-shadow: inset 0 0 0 1px var(--muted); }
+    .thumb[aria-current="true"]:hover .thumb-frame {
+      box-shadow: 0 0 0 2px var(--chrome), 0 0 0 4px var(--ink);
+    }
+    .thumb-scale {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1280px;
+      height: 720px;
+      transform-origin: top left;
+      pointer-events: none;
+    }
+    .options {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+    }
+    .icon-btn, .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      flex: none;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .icon-btn:hover, .theme-toggle:hover { color: var(--ink); background: var(--surface); }
+    .icon-btn:disabled { opacity: .35; cursor: default; background: transparent; color: var(--muted); }
+    .icon-btn svg, .theme-toggle svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .theme-toggle .sun { display: none; }
+    [data-theme="dark"] .theme-toggle .sun { display: block; }
+    [data-theme="dark"] .theme-toggle .moon { display: none; }
+    .count {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .stage {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      overflow: hidden;
+      container-type: size;
+      background: var(--chrome);
+    }
+    #scaler {
+      position: relative;
+      width: min(100cqw, calc(100cqh * 16 / 9));
+      aspect-ratio: 16 / 9;
+    }
+    #slides { position: absolute; inset: 0; }
+    .slide {
+      display: flex;
+      flex-direction: column;
+      width: 1280px;
+      height: 720px;
+      overflow: hidden;
+      background: var(--page);
+      color: var(--ink);
+      container-type: inline-size;
+    }
+    .canvas {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      font-size: 1.72cqw;
+      line-height: 1.45;
+      letter-spacing: -.015em;
+      padding: 5.2cqw 5.8cqw 4.6cqw;
+    }
+    #slides > .slide { display: none; width: 100%; height: 100%; }
+    #slides > .slide.is-active { display: flex; }
+    .thumb-scale .slide { display: flex !important; }
+    .slide.title .canvas { padding: 5.8cqw 6.2cqw 5cqw; }
+    .slide.center .canvas { justify-content: center; }
+    .slide .canvas > * + * { margin-top: 2.1cqw; }
+    .slide.title .canvas > * + * { margin-top: 2.6cqw; }
+    .canvas > .tail, .slide.title .canvas > .tail { margin-top: auto; padding-top: 2cqw; }
+    .kicker, .foot, .slide th, .branches .quiet {
+      font-family: var(--mono);
+      font-weight: 500;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .kicker { margin: 0; font-size: 1.02cqw; color: var(--muted); }
+    .slide h1, .slide h2, .slide h3, .slide p, .slide blockquote, .slide figure { margin: 0; }
+    .canvas > :is(h1, h2, p, ul, ol, table, pre, blockquote) { flex-shrink: 0; }
+    .slide h1 {
+      font-size: 3.45cqw;
+      line-height: 1.08;
+      font-weight: 600;
+      letter-spacing: -.035em;
+      max-width: 18em;
+      text-wrap: balance;
+    }
+    .slide.title h1 {
+      font-size: 6.6cqw;
+      line-height: .96;
+      letter-spacing: -.045em;
+      max-width: 11em;
+    }
+    .slide.center h1 { font-size: 4.8cqw; line-height: 1.02; max-width: 14em; }
+    .slide h2 { font-size: 1.7cqw; line-height: 1.25; font-weight: 600; letter-spacing: -.02em; }
+    .slide h3 { font-size: 1.45cqw; line-height: 1.3; font-weight: 600; letter-spacing: -.015em; }
+    .slide p { max-width: 36em; }
+    .slide .lede {
+      max-width: 28em;
+      font-size: 2.05cqw;
+      line-height: 1.35;
+      color: var(--muted);
+      letter-spacing: -.02em;
+    }
+    .foot { font-size: 1.02cqw; color: var(--quiet); }
+    .slide p.foot { max-width: none; }
+    .slide .canvas > .kicker + h1 { margin-top: 1.3cqw; }
+    .slide .tail > * + * { margin-top: 1.7cqw; }
+    .tail .foot { margin-top: 3.2cqw; }
+    hr.rule { width: 4.4cqw; height: .26cqw; margin: 0; border: 0; background: var(--strong); }
+    .muted { color: var(--muted); }
+    .quiet { color: var(--quiet); }
+    .strong { font-weight: 600; }
+    .slide a { color: inherit; text-underline-offset: .25em; }
+    .slide :not(pre) > code {
+      font-family: var(--mono);
+      font-size: .84em;
+      background: var(--surface-deep);
+      padding: .08em .35em;
+      border-radius: .25cqw;
+    }
+    .slide ul, .slide ol {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25cqw;
+    }
+    .slide li { position: relative; padding-left: 1.8cqw; }
+    .slide ul li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: .72em;
+      width: .85cqw;
+      height: .12cqw;
+      background: var(--strong);
+    }
+    .slide ol { counter-reset: step; }
+    .slide ol li { counter-increment: step; }
+    .slide ol li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: .15em;
+      font-family: var(--mono);
+      font-size: .72em;
+      color: var(--quiet);
+    }
+    .split {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3.6cqw;
+    }
+    .split > * { min-width: 0; min-height: 0; }
+    .stack { display: flex; flex-direction: column; gap: 1.15cqw; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.4cqw; }
+    .grid.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card { background: var(--surface); border-radius: .7cqw; padding: 1.6cqw 1.7cqw; }
+    .slide .card > * + * { margin-top: .7cqw; }
+    .card p { color: var(--muted); font-size: 1.32cqw; line-height: 1.45; }
+    .stat b {
+      display: block;
+      font-size: 4.8cqw;
+      font-weight: 600;
+      letter-spacing: -.045em;
+      line-height: .95;
+    }
+    .stat span { display: block; margin-top: .7cqw; color: var(--muted); font-size: 1.25cqw; font-weight: 400; }
+    .callout {
+      border-left: .18cqw solid var(--strong);
+      background: var(--surface);
+      padding: 1.3cqw 1.6cqw;
+      font-size: 1.5cqw;
+      line-height: 1.45;
+    }
+    .slide blockquote {
+      font-size: 3.4cqw;
+      font-weight: 600;
+      letter-spacing: -.03em;
+      line-height: 1.18;
+      max-width: 18em;
+      text-wrap: balance;
+    }
+    .slide table { width: 100%; border-collapse: collapse; font-size: 1.5cqw; line-height: 1.4; }
+    .slide th {
+      text-align: left;
+      font-size: 1cqw;
+      color: var(--muted);
+      padding: 0 1.6cqw .9cqw 0;
+      border-bottom: 1px solid var(--table-rule);
+    }
+    .slide td {
+      padding: 1.15cqw 1.6cqw 1.15cqw 0;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    .slide td:first-child { font-weight: 600; }
+    .slide td:last-child, .slide th:last-child { padding-right: 0; }
+    pre.code {
+      margin: 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: .7cqw;
+      padding: 1.5cqw 1.7cqw;
+      overflow: auto;
+      font-family: var(--mono);
+      font-size: 1.28cqw;
+      line-height: 1.6;
+      letter-spacing: 0;
+    }
+    .canvas > .chart-block, .split .chart-block { flex: 1; min-height: 0; }
+    .chart-block { display: flex; flex-direction: column; justify-content: center; }
+    .chart-block figcaption {
+      display: flex;
+      justify-content: flex-start;
+      align-items: baseline;
+      gap: 1cqw;
+      margin-bottom: .7cqw;
+      font-size: 1.25cqw;
+      font-weight: 600;
+      letter-spacing: -.01em;
+    }
+    .chart-block figcaption span { font-weight: 400; color: var(--muted); font-size: 1.05cqw; }
+    .chart { display: block; width: 100%; height: auto; aspect-ratio: 720 / 340; min-height: 0; }
+    .chart text { font-family: var(--font); }
+    .chart .grid { stroke: var(--line); stroke-width: 1; }
+    .chart .tick { fill: var(--muted); font-size: 15px; }
+    .chart .value { fill: var(--ink); font-weight: 600; font-size: 17px; }
+    .split .chart .tick { font-size: 18px; }
+    .split .chart .value { font-size: 20px; }
+    .chart .series-main { fill: none; stroke: var(--series-main); stroke-width: 2.5; }
+    .chart .series-alt { fill: none; stroke: var(--series-secondary); stroke-width: 2; stroke-dasharray: 6 5; }
+    .chart .series-third { fill: none; stroke: var(--quiet); stroke-width: 2; stroke-dasharray: 1.5 4; }
+    .chart .bar-0 { fill: var(--series-main); }
+    .chart .bar-1 { fill: var(--series-secondary); }
+    .chart .bar-2 { fill: var(--quiet); }
+    .diagram { display: block; width: 100%; height: auto; min-height: 0; flex: 1; }
+    .diagram text { font-family: var(--font); fill: var(--ink); }
+    .diagram .box, .diagram .box-decision { stroke-width: 1.5; }
+    .diagram .box { fill: var(--diagram-node); stroke: var(--diagram-border); }
+    .diagram .box-decision { fill: var(--diagram-decision); stroke: var(--diagram-border); }
+    .diagram .edge { stroke: var(--diagram-connector); stroke-width: 1.5; fill: none; }
+    .diagram .name { font-weight: 600; }
+    .diagram .note, .diagram .note text { fill: var(--muted); font-family: var(--mono); }
+    .flow, .branches { display: flex; flex-wrap: wrap; align-items: center; gap: 1cqw; }
+    .branches { align-items: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: 1.4cqw; }
+    .node {
+      border: 1px solid var(--diagram-border);
+      background: var(--diagram-node);
+      color: var(--ink);
+      border-radius: .7cqw;
+      padding: 1.15cqw 1.45cqw;
+      font-size: 1.5cqw;
+      font-weight: 600;
+      letter-spacing: -.02em;
+    }
+    .node.decision { background: var(--diagram-decision); }
+    .arrow {
+      width: 2.4cqw;
+      height: 0;
+      border-top: 1.5px solid var(--diagram-connector);
+      position: relative;
+      flex: none;
+    }
+    .arrow::after {
+      content: "";
+      position: absolute;
+      right: -.05cqw;
+      top: -.38cqw;
+      border-width: .32cqw 0 .32cqw .5cqw;
+      border-style: solid;
+      border-color: transparent transparent transparent var(--diagram-connector);
+    }
+    .branches .node { width: fit-content; max-width: 100%; }
+    .branches .quiet { font-size: .95cqw; margin: 0 0 .55cqw; }
+    /* Authoring primitives: open comparisons, proportional parts, ordered milestones. */
+    .split.wide { grid-template-columns: 1fr 1.7fr; }
+    .split > .stack { justify-content: center; }
+    .stat.hero b { font-size: 7.4cqw; }
+    .stat small { display: block; margin-top: 1.2cqw; font-size: 1.2cqw; color: var(--quiet); }
+    .compare { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 3cqw; flex: 1; }
+    .compare .stat { padding: 2.5cqw 0; border-top: 1px solid var(--line); }
+    .compare .stat b { margin: 1.5cqw 0; font-size: 7.4cqw; }
+    .compare .direction { font-size: 3.2cqw; color: var(--quiet); }
+    .composition { display: flex; height: 6cqw; gap: .3cqw; }
+    .composition > * { flex: var(--share) 0 0; min-width: 0; background: var(--series-main); }
+    .composition > :nth-child(2) { background: var(--series-secondary); }
+    .composition > :nth-child(3) { background: var(--series-bar); }
+    .composition > :nth-child(4) { background: var(--surface-deep); border: 1px solid var(--diagram-border); }
+    .key { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2cqw; margin-top: 2cqw; }
+    .key b { display: block; font-size: 2.7cqw; font-weight: 600; }
+    .key span { color: var(--muted); font-size: 1.35cqw; }
+    .timeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4cqw; padding-top: 3cqw; }
+    .timeline > * { border-top: 2px solid var(--line); padding-top: 1.4cqw; position: relative; }
+    .timeline > *::before { content: ""; position: absolute; top: -.45cqw; left: 0; width: .7cqw; height: .7cqw; border-radius: 50%; background: var(--ink); }
+    .slide .timeline h2 { margin: 1.2cqw 0 .7cqw; }
+    .timeline p:not(.foot) { color: var(--muted); font-size: 1.45cqw; }
+    .slide .matrix th { text-transform: none; letter-spacing: 0; font-family: var(--font); font-size: 1.35cqw; }
+    .slide .matrix td { width: 38%; padding: 2cqw; border: 1px solid var(--line); font-weight: 400; }
+    .matrix td.focus { background: var(--surface-deep); }
+    .matrix td strong { display: block; margin-bottom: .7cqw; }
+    .matrix td span { color: var(--muted); font-size: 1.3cqw; }
+    .chart .zero { stroke: var(--diagram-border); stroke-width: 1.3; }
+    .chart .point-0 { fill: var(--series-main); }
+    .chart .point-1 { fill: var(--series-secondary); }
+    .chart .point-2 { fill: var(--quiet); }
+    .chart .leader { fill: none; stroke: var(--quiet); stroke-width: 1; }
+    .diagram .edge.dashed { stroke-dasharray: 7 6; }
+    .diagram .arrowhead { fill: var(--diagram-connector); }
+    .exit-present { display: none; position: fixed; top: 12px; right: 12px; z-index: 10; background: var(--page); }
+    .app.is-presenting .exit-present { display: inline-flex; }
+    .app.is-presenting .rail { display: none; }
+    .app.is-presenting .stage { padding: 0; background: var(--page); }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+    @media (max-width: 800px) {
+      .app { flex-direction: column; }
+      .stage { order: 1; padding: 12px; }
+      .rail { order: 2; width: auto; border-right: 0; border-top: 1px solid var(--line); }
+      .thumbs {
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        align-items: center;
+        height: 108px;
+        flex: none;
+      }
+      .thumb { width: 176px; flex: none; }
+    }
+    @media (pointer: coarse) {
+      .icon-btn, .theme-toggle { width: 44px; height: 44px; }
+    }
+    @media print {
+      @page { size: 13.333in 7.5in; margin: 0; }
+      body, .app, .stage { display: block; height: auto; overflow: visible; background: #fff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .rail, .sr-only, .exit-present { display: none !important; }
+      .stage { container-type: normal; padding: 0; }
+      #scaler { width: 1280px; aspect-ratio: auto; }
+      #slides { position: static; }
+      #slides > .slide {
+        display: flex !important;
+        width: 1280px;
+        height: 720px;
+        break-after: page;
+        position: relative;
+      }
+    }
+  </style>
+  <style id="deck-custom"></style>
+</head>
+<body>
+  <div class="app">
+    <nav class="rail" aria-label="Slides">
+      <div class="thumbs" id="thumbs"></div>
+      <div class="options">
+        <button class="icon-btn" id="prev" type="button" aria-label="Previous slide" title="Previous slide">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 14l6-6 6 6"/></svg>
+        </button>
+        <button class="icon-btn" id="next" type="button" aria-label="Next slide" title="Next slide">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10l6 6 6-6"/></svg>
+        </button>
+        <button class="icon-btn" id="present" type="button" aria-label="Enter full screen" title="Full screen · Esc to exit" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg>
+        </button>
+        <span class="count" id="count">1 / 1</span>
+        <button class="theme-toggle" type="button" aria-label="Toggle light and dark theme" title="Toggle light and dark theme">
+          <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+        </button>
+      </div>
+    </nav>
+    <main class="stage">
+      <div id="scaler">
+        <div id="slides">
+<section class="slide title" id="slide-1">
+  <p class="kicker">How it works · how to use it</p>
+  <h1>Agent HTML,<br>on every machine you own.</h1>
+  <div class="tail">
+    <hr class="rule">
+    <p class="lede">Shelf is a local-first store for HTML written by agents: one CLI, a desktop app that reads your disk, and a PWA for your phone.</p>
+    <p class="foot">TyrellD1/shelf · v0.1.0</p>
+  </div>
+</section>
+
+<section class="slide center" id="slide-2">
+  <p class="kicker">The problem</p>
+  <h1>A finished report should not die in a temp folder.</h1>
+  <p class="lede">Agents write good HTML — explainers, decks, review checklists — and then the file sits in one project directory on one machine.</p>
+</section>
+
+<section class="slide" id="slide-3">
+  <p class="kicker">Shape</p>
+  <h1>One writer, one store, three ways to read it.</h1>
+  <svg class="diagram" viewBox="0 0 1040 380" role="img" aria-label="The CLI writes to the local shelf at ~/.shelf. The desktop app reads the local shelf through the CLI. The CLI syncs with the Cloudflare Worker and Postgres. The PWA reads the same Worker over the network.">
+    <defs><marker id="shelf-shape-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10Z"/></marker></defs>
+    <g marker-end="url(#shelf-shape-arrow)">
+      <path class="edge" d="M150 86H300"/>
+      <path class="edge" d="M430 140H700"/>
+      <path class="edge dashed" d="M300 190V300H120"/>
+      <path class="edge dashed" d="M755 190V276"/>
+    </g>
+    <rect class="box" x="20" y="41" width="130" height="90" rx="8"/>
+    <rect class="box-decision" x="300" y="41" width="130" height="90" rx="8"/>
+    <rect class="box" x="700" y="41" width="300" height="90" rx="8"/>
+    <rect class="box" x="20" y="300" width="280" height="70" rx="8"/>
+    <rect class="box" x="640" y="276" width="200" height="80" rx="8"/>
+    <g class="name" font-size="22" text-anchor="middle" dominant-baseline="middle">
+      <text x="85" y="76">agent</text>
+      <text x="85" y="104">harness</text>
+      <text x="365" y="66">shelf CLI</text>
+      <text x="365" y="100">~/.shelf</text>
+      <text x="850" y="76">Cloudflare Worker</text>
+      <text x="850" y="104">+ Postgres (Neon)</text>
+      <text x="160" y="336">desktop app · reads the disk</text>
+      <text x="740" y="316">PWA · reads the API</text>
+    </g>
+    <text class="note" x="225" y="70" font-size="17" text-anchor="middle">write</text>
+    <text class="note" x="560" y="128" font-size="17" text-anchor="middle">sync · push / pull</text>
+    <text class="note" x="245" y="268" font-size="17" text-anchor="middle">status · list · read</text>
+    <text class="note" x="790" y="238" font-size="17" text-anchor="middle">HTTPS + session</text>
+  </svg>
+  <p class="foot">Solid = the write path · dashed = the read paths</p>
+</section>
+
+<section class="slide" id="slide-4">
+  <p class="kicker">The write path</p>
+  <h1>Write once; the shelf handles the rest.</h1>
+  <div class="tail stack">
+    <div class="flow" role="img" aria-label="Read the bytes, hash them with sha256, store them under the machine id, push the row to the server, then mark it synced.">
+      <div class="node">read bytes</div><i class="arrow" aria-hidden="true"></i>
+      <div class="node">sha256</div><i class="arrow" aria-hidden="true"></i>
+      <div class="node">store in ~/.shelf</div><i class="arrow" aria-hidden="true"></i>
+      <div class="node decision">push row</div><i class="arrow" aria-hidden="true"></i>
+      <div class="node">synced</div>
+    </div>
+    <p class="lede">The push is the only networked step, and a failure there never loses the file: it stays local and is pushed by the next <span class="mono">shelf sync</span>.</p>
+  </div>
+</section>
+
+<section class="slide" id="slide-5">
+  <p class="kicker">What to call</p>
+  <h1>One command at the end of a task.</h1>
+  <div class="split">
+    <pre class="code">$ shelf write ./outputs/q3-report.html --json
+{
+  "ok": true,
+  "action": "created",
+  "path": "outputs/q3-report.html",
+  "file": {
+    "id": "sf_a41c9f0b7d3e28a5c6b1",
+    "machineId": "tys-macbook-pro",
+    "bytes": 48213
+  },
+  "pushed": true
+}</pre>
+    <div class="stack">
+      <h2>Or write and look</h2>
+      <p class="muted"><span class="mono">shelf open &lt;path&gt;</span> writes the file if it is not on the shelf yet, then brings the desktop app forward on that document.</p>
+      <p class="muted">Agents only ever need these two calls. The html, slides and review-checklist skills end by telling the agent to run one of them.</p>
+    </div>
+  </div>
+  <p class="foot">Real output shape · ids are derived, not random</p>
+</section>
+
+<section class="slide" id="slide-6">
+  <p class="kicker">Use</p>
+  <h1>Eight commands, one story.</h1>
+  <table>
+    <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+    <tbody>
+      <tr><td><span class="mono">shelf setup</span></td><td>Browser handoff, stores a long-lived key, sets this machine's id</td></tr>
+      <tr><td><span class="mono">shelf write &lt;path&gt;</span></td><td>Store and push a file; existing paths become -v2, -v3, …</td></tr>
+      <tr><td><span class="mono">shelf open &lt;path&gt;</span></td><td>Write if needed, then open it in the desktop app</td></tr>
+      <tr><td><span class="mono">shelf list</span></td><td>Newest first, searchable and filterable by machine</td></tr>
+      <tr><td><span class="mono">shelf sync</span></td><td>Push local writes, pull what the other machines wrote</td></tr>
+      <tr><td><span class="mono">shelf status</span></td><td>Account, machine id, counts, pending pushes, last sync</td></tr>
+    </tbody>
+  </table>
+  <div class="tail"><p class="foot">Every command takes <span class="mono">--json</span>; add <span class="mono">--stream</span> for progress lines before the result.</p></div>
+</section>
+
+<section class="slide" id="slide-7">
+  <p class="kicker">First run, once per machine</p>
+  <h1>Authorize in the browser; never think about it again.</h1>
+  <div class="timeline">
+    <article><p class="foot">1</p><h2>Install</h2><p><span class="mono">curl … install.sh | bash</span> drops the CLI in ~/.local/bin.</p></article>
+    <article><p class="foot">2</p><h2>Authorize</h2><p><span class="mono">shelf setup</span> opens the web app; you click once and the key lands on a loopback port.</p></article>
+    <article><p class="foot">3</p><h2>Name the machine</h2><p>It prompts for a machine id (defaulting to your hostname). That id colours every row you write.</p></article>
+  </div>
+  <div class="tail"><p class="callout"><strong>After that:</strong> all calls are authenticated and attributed to that machine id.</p><p class="foot">The key never expires; <span class="mono">shelf logout</span> drops it locally, running setup again rotates it.</p></div>
+</section>
+
+<section class="slide" id="slide-8">
+  <p class="kicker">Reading it back</p>
+  <h1>Same shelf, whichever screen is nearest.</h1>
+  <div class="grid">
+    <article class="card"><h2>Desktop (macOS)</h2><p>Native window, local-first. Documents come off your disk with a strict content policy — fast, and offline. <span class="mono">⌘P</span> searches everything.</p></article>
+    <article class="card"><h2>Phone (PWA)</h2><p>Add the web app to your home screen. The same UI, reading the same API over the network.</p></article>
+    <article class="card"><h2>Terminal</h2><p><span class="mono">shelf list</span> and <span class="mono">shelf read</span> for the agent, a script, or a quick look.</p></article>
+  </div>
+  <div class="tail"><hr class="rule"><p class="lede">The list is newest-first with a search box, machine filter chips, and a colour per machine.</p></div>
+</section>
+
+<section class="slide" id="slide-9">
+  <p class="kicker">Everyday cases</p>
+  <h1>The behaviour you should expect without reading the code.</h1>
+  <table>
+    <thead><tr><th scope="col">You do</th><th scope="col">Shelf does</th></tr></thead>
+    <tbody>
+      <tr><td>Write the same path with new content</td><td>Creates <span class="mono">report-v2.html</span>; the old version stays readable</td></tr>
+      <tr><td>Write identical bytes again</td><td>No-op — nothing uploaded, nothing duplicated</td></tr>
+      <tr><td>Write offline</td><td>Stores locally, reports a warning, pushes on the next sync</td></tr>
+      <tr><td>Sync on a second machine</td><td>Pulls the other machine's files into <span class="mono">~/.shelf/html/&lt;machine&gt;/…</span></td></tr>
+    </tbody>
+  </table>
+  <div class="tail"><p class="foot">There is no delete by design: paths are immutable and cheap, so a shelf only grows.</p></div>
+</section>
+
+<section class="slide center" id="slide-10">
+  <p class="kicker">Next</p>
+  <h1>Start with one write.</h1>
+  <p class="lede"><span class="mono">shelf setup</span> → <span class="mono">shelf write ./anything.html</span> → <span class="mono">shelf open ./anything.html</span></p>
+  <p class="foot">Repo: github.com/TyrellD1/shelf · Design notes: docs/DESIGN.md · Agent skill: skills/shelf/SKILL.md</p>
+</section>
+
+        </div>
+      </div>
+    </main>
+    <button class="icon-btn exit-present" id="exit-present" type="button" aria-label="Exit full screen" title="Exit full screen (Esc)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <p class="sr-only" id="live" aria-live="polite"></p>
+  <script>
+    const SLIDE_W = 1280;
+    const app = document.querySelector(".app");
+    const presentButton = document.getElementById("present");
+    const exitPresentButton = document.getElementById("exit-present");
+    let browserFullscreen = false;
+    function setPresenting(on) {
+      app.classList.toggle("is-presenting", on);
+      presentButton.setAttribute("aria-pressed", String(on));
+      (on ? exitPresentButton : presentButton).focus({ preventScroll: true });
+    }
+    presentButton.addEventListener("click", async () => {
+      setPresenting(true);
+      // Hiding the rail also works in embedded viewers that disallow native fullscreen.
+      try {
+        await document.documentElement.requestFullscreen?.();
+        browserFullscreen = Boolean(document.fullscreenElement);
+      } catch { /* Keep the in-window presentation mode. */ }
+    });
+    document.addEventListener("fullscreenchange", () => {
+      if (document.fullscreenElement) browserFullscreen = true;
+      else if (browserFullscreen) { browserFullscreen = false; setPresenting(false); }
+    });
+    function leavePresentation() {
+      setPresenting(false);
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }
+    exitPresentButton.addEventListener("click", leavePresentation);
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !app.classList.contains("is-presenting")) return;
+      event.preventDefault();
+      leavePresentation();
+    });
+    const themeButton = document.querySelector(".theme-toggle");
+    const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+    function setTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      const label = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+      themeButton.setAttribute("aria-label", label);
+      themeButton.title = label;
+    }
+    themeButton.addEventListener("click", () => {
+      const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.themePreference = theme;
+      setTheme(theme);
+      try { localStorage.setItem("html-theme", theme); } catch {}
+    });
+    systemTheme.addEventListener("change", (event) => {
+      if (document.documentElement.dataset.themePreference === "system") setTheme(event.matches ? "dark" : "light");
+    });
+    setTheme(document.documentElement.dataset.theme);
+
+    function svgEl(name, attrs) {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", name);
+      for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, String(value));
+      return el;
+    }
+    function fmt(n) {
+      return Number(n.toPrecision(4)).toLocaleString("en-US", { maximumSignificantDigits: 4, ...(Math.abs(n) >= 10000 ? { notation: "compact" } : {}) });
+    }
+    function chartText(svg, x, y, text, cls = "tick", anchor = "start", size = 15) {
+      const el = svgEl("text", { x, y, class: cls, "text-anchor": anchor, "dominant-baseline": "middle", "font-size": size });
+      el.textContent = text;
+      svg.append(el);
+      return el;
+    }
+    function seriesFrom(svg) {
+      const series = [...svg.querySelectorAll("[data-values]")].map((el) => {
+        const parts = el.dataset.values.split(",").map((part) => part.trim());
+        if (parts.some((part) => !part || !Number.isFinite(Number(part)))) throw Error("Use finite numbers; no empty or missing values.");
+        return { name: el.dataset.name || "", values: parts.map(Number), labels: el.dataset.labels?.split(",").map((part) => part.trim()) || [] };
+      });
+      if (!series.length || series.length > 3) throw Error("Use one to three series.");
+      const count = series[0].values.length;
+      if (series.some((item) => item.values.length !== count)) throw Error("Series must have equal lengths.");
+      if (series.some((item) => item.labels.length && (item.labels.length !== count || item.labels.some((s) => !s)))) throw Error("Use one non-empty label per value.");
+      if (series.length > 1 && series.some((item) => !item.name)) throw Error("Name each series.");
+      return series;
+    }
+    function chartDomain(svg, series) {
+      const values = series.flatMap((item) => item.values);
+      const lo = Math.min(0, ...values), hi = Math.max(0, ...values);
+      const span = hi - lo || 1;
+      const power = 10 ** Math.floor(Math.log10(span / 4));
+      const raw = span / 4 / power;
+      const step = (raw <= 1 ? 1 : raw <= 2 ? 2 : raw <= 2.5 ? 2.5 : raw <= 5 ? 5 : 10) * power;
+      const hasMin = svg.hasAttribute("data-min"), hasMax = svg.hasAttribute("data-max");
+      const min = hasMin ? Number(svg.dataset.min) : Math.floor(lo / step) * step;
+      const max = hasMax ? Number(svg.dataset.max) : (hi === lo ? min + 1 : Math.ceil(hi / step) * step);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) throw Error("Axis bounds must be finite and increasing.");
+      if (Math.min(...values) < min || Math.max(...values) > max) throw Error("Axis bounds must include every value.");
+      if (svg.dataset.chart !== "line" && (min > 0 || max < 0)) throw Error("Bar axes must include zero.");
+      const exactSpan = max - min;
+      const tickPower = 10 ** Math.floor(Math.log10(exactSpan / 4));
+      const tickRaw = exactSpan / 4 / tickPower;
+      const tickStep = (tickRaw <= 1 ? 1 : tickRaw <= 2 ? 2 : tickRaw <= 2.5 ? 2.5 : tickRaw <= 5 ? 5 : 10) * tickPower;
+      const ticks = [min];
+      for (let n = Math.floor(min / tickStep) + 1; n * tickStep < max - exactSpan * 1e-9; n++) {
+        const v = Number((n * tickStep).toPrecision(12));
+        if (v - min > exactSpan * .07 && max - v > exactSpan * .07) ticks.push(v);
+      }
+      ticks.push(max);
+      return { min, max, ticks };
+    }
+    function chartGrid(svg, domain, plot, suffix) {
+      const scale = (v) => plot.b - (v - domain.min) / (domain.max - domain.min) * (plot.b - plot.t);
+      domain.ticks.forEach((v) => {
+        const y = scale(v);
+        svg.append(svgEl("line", { x1: plot.l, x2: plot.r, y1: y, y2: y, class: v === 0 ? "grid zero" : "grid" }));
+        chartText(svg, plot.l - 12, y, fmt(v) + suffix, "tick", "end", 13);
+      });
+      if (domain.min < 0 && domain.max > 0 && !domain.ticks.includes(0)) {
+        svg.append(svgEl("line", { x1: plot.l, x2: plot.r, y1: scale(0), y2: scale(0), class: "zero" }));
+      }
+      return scale;
+    }
+    function drawLines(svg, series, domain, suffix) {
+      const labels = series.find((item) => item.labels.length)?.labels || [];
+      const count = series[0].values.length;
+      const plot = { l: 66, r: 548, t: 26, b: 290 };
+      const scale = chartGrid(svg, domain, plot, suffix);
+      const xAt = (i) => count === 1 ? (plot.l + plot.r) / 2 : plot.l + (plot.r - plot.l) * i / (count - 1);
+      const ends = [];
+      series.forEach((item, i) => {
+        const cls = ["series-main", "series-alt", "series-third"][i];
+        svg.append(svgEl("polyline", { points: item.values.map((v, j) => `${xAt(j)},${scale(v)}`).join(" "), class: cls }));
+        item.values.forEach((v, j) => svg.append(svgEl("circle", { cx: xAt(j), cy: scale(v), r: 3.2, class: `point-${i}` })));
+        ends.push({ item, i, y: scale(item.values[count - 1]), labelY: scale(item.values[count - 1]) });
+      });
+      // Separate direct labels without moving the actual data points.
+      ends.sort((a, b) => a.y - b.y);
+      ends.forEach((end, i) => { end.labelY = Math.max(plot.t + 8, end.y, i ? ends[i - 1].labelY + 44 : -Infinity); });
+      const overflow = Math.max(0, ends[ends.length - 1].labelY - (plot.b - 8));
+      ends.forEach(({ item, i, y, labelY }) => {
+        const target = labelY - overflow;
+        svg.append(svgEl("path", { d: `M${xAt(count - 1) + 6} ${y} L568 ${target}`, class: "leader" }));
+        chartText(svg, 578, target - (item.name ? 9 : 0), fmt(item.values[count - 1]) + suffix, "value", "start", 17);
+        if (item.name) chartText(svg, 578, target + 11, item.name, "tick", "start", 13);
+      });
+      const step = count > 7 ? Math.ceil((count - 1) / 6) : 1;
+      for (let i = 0; i < count; i++) {
+        if (i % step && i !== count - 1) continue;
+        chartText(svg, xAt(i), 316, labels[i] || String(i + 1), "tick", "middle", 13);
+      }
+    }
+    function drawBars(svg, series, domain, suffix) {
+      const groups = series[0].values.length;
+      const labels = series.find((item) => item.labels.length)?.labels || [];
+      const legend = series.length > 1;
+      const plot = { l: 66, r: 700, t: legend ? 62 : 32, b: 282 };
+      if (legend) series.forEach((item, i) => {
+        const x = 66 + i * 210;
+        svg.append(svgEl("rect", { x, y: 8, width: 13, height: 13, class: `bar-${i}` }));
+        chartText(svg, x + 20, 15, item.name, "tick", "start", 14);
+      });
+      const scale = chartGrid(svg, domain, plot, suffix);
+      const groupW = (plot.r - plot.l) / groups, inner = groupW * .64, barW = inner / series.length;
+      series.forEach((item, i) => item.values.forEach((v, j) => {
+        const x = plot.l + j * groupW + (groupW - inner) / 2 + i * barW;
+        const y = scale(v), base = scale(0), width = Math.max(barW - 4, 1);
+        svg.append(svgEl("rect", { x, y: Math.min(y, base), width, height: Math.abs(base - y), class: `bar-${i}` }));
+        chartText(svg, x + width / 2, y + (v < 0 ? 14 : -13), fmt(v) + suffix, "value", "middle", 13);
+      }));
+      for (let i = 0; i < groups; i++) chartText(svg, plot.l + (i + .5) * groupW, 322, labels[i] || String(i + 1), "tick", "middle", 13);
+    }
+    function drawHorizontal(svg, series, domain, suffix) {
+      if (series.length !== 1) throw Error("Horizontal bars use one series.");
+      const item = series[0], rows = item.values.length;
+      const plot = { l: 188, r: 644, t: 32, b: 282 };
+      const scale = (v) => plot.l + (v - domain.min) / (domain.max - domain.min) * (plot.r - plot.l);
+      domain.ticks.forEach((v) => {
+        const x = scale(v);
+        svg.append(svgEl("line", { x1: x, x2: x, y1: 16, y2: 294, class: v === 0 ? "grid zero" : "grid" }));
+        chartText(svg, x, 318, fmt(v) + suffix, "tick", "middle", 13);
+      });
+      if (domain.min < 0 && domain.max > 0 && !domain.ticks.includes(0)) svg.append(svgEl("line", { x1: scale(0), x2: scale(0), y1: 16, y2: 294, class: "zero" }));
+      const rowH = (plot.b - plot.t) / rows;
+      item.values.forEach((v, i) => {
+        const y = plot.t + (i + .5) * rowH, base = scale(0), x = scale(v);
+        chartText(svg, plot.l - 14, y, item.labels[i] || String(i + 1), "tick", "end", 15);
+        svg.append(svgEl("rect", { x: Math.min(x, base), y: y - rowH * .23, width: Math.abs(x - base), height: rowH * .46, class: "bar-0" }));
+        // A shared value column keeps signed bars clear of category labels.
+        chartText(svg, domain.min < 0 ? plot.r + 14 : x + 9, y, fmt(v) + suffix, "value", "start", 15);
+      });
+    }
+    function renderCharts(root) {
+      root.querySelectorAll("svg.chart[data-chart]").forEach((svg) => {
+        if (svg.dataset.ready === "1") return;
+        svg.setAttribute("viewBox", "0 0 720 340");
+        svg.setAttribute("role", "img");
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        try {
+          const series = seriesFrom(svg), domain = chartDomain(svg, series);
+          const draw = { line: drawLines, bars: drawBars, hbars: drawHorizontal }[svg.dataset.chart];
+          if (!draw) throw Error("Unknown chart type.");
+          svg.replaceChildren();
+          draw(svg, series, domain, svg.dataset.suffix || "");
+          svg.dataset.ready = "1";
+        } catch (error) {
+          svg.replaceChildren();
+          svg.dataset.error = error.message;
+          svg.setAttribute("aria-label", `Chart error: ${error.message}`);
+          chartText(svg, 24, 90, "Chart needs attention", "value", "start", 22);
+          chartText(svg, 24, 124, error.message, "tick", "start", 16);
+          console.error("Chart:", error.message);
+        }
+      });
+    }
+    function prefixIds(clone, index) {
+      const map = new Map();
+      clone.querySelectorAll("[id]").forEach((el) => {
+        const next = `t${index}-${el.id}`;
+        map.set(el.id, next);
+        el.id = next;
+      });
+      if (!map.size) return;
+      clone.querySelectorAll("*").forEach((el) => {
+        for (const attr of [...el.attributes]) {
+          let value = attr.value.replace(/url\(["']?#([^\s)"']+)["']?\)/g, (match, id) => (
+            map.has(id) ? `url(#${map.get(id)})` : match
+          ));
+          if (["href", "xlink:href"].includes(attr.name) && value.startsWith("#")) {
+            value = map.has(value.slice(1)) ? `#${map.get(value.slice(1))}` : value;
+          }
+          if (["aria-labelledby", "aria-describedby", "for"].includes(attr.name)) {
+            value = value.split(/\s+/).map((id) => map.get(id) || id).join(" ");
+          }
+          if (value !== attr.value) el.setAttribute(attr.name, value);
+        }
+      });
+    }
+    function slideTitle(slide, index) {
+      const heading = slide.querySelector("h1, h2, blockquote")?.cloneNode(true);
+      heading?.querySelectorAll("br").forEach((br) => br.replaceWith(" "));
+      return heading?.textContent.replace(/\s+/g, " ").trim() || `Slide ${index + 1}`;
+    }
+    function fitThumbs() {
+      document.querySelectorAll(".thumb-frame").forEach((frame) => {
+        const scale = frame.clientWidth / SLIDE_W;
+        if (scale > 0) frame.firstElementChild.style.transform = `scale(${scale})`;
+      });
+    }
+
+    const slides = [...document.querySelectorAll("#slides > .slide")];
+    for (const slide of slides) {
+      const canvas = document.createElement("div");
+      canvas.className = "canvas";
+      while (slide.firstChild) canvas.append(slide.firstChild);
+      slide.append(canvas);
+    }
+    renderCharts(document.getElementById("slides"));
+    const thumbList = document.getElementById("thumbs");
+    const thumbs = slides.map((slide, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "thumb";
+      button.setAttribute("aria-label", `Slide ${index + 1}: ${slideTitle(slide, index)}`);
+      const num = document.createElement("span");
+      num.className = "num";
+      num.textContent = String(index + 1);
+      num.setAttribute("aria-hidden", "true");
+      const frame = document.createElement("span");
+      frame.className = "thumb-frame";
+      const scale = document.createElement("span");
+      scale.className = "thumb-scale";
+      const clone = slide.cloneNode(true);
+      clone.removeAttribute("id");
+      clone.classList.remove("is-active");
+      clone.querySelectorAll("script").forEach((script) => script.remove());
+      prefixIds(clone, index);
+      clone.setAttribute("inert", "");
+      clone.setAttribute("aria-hidden", "true");
+      scale.append(clone);
+      frame.append(scale);
+      button.append(num, frame);
+      button.addEventListener("click", () => go(index));
+      thumbList.append(button);
+      return button;
+    });
+
+    const count = document.getElementById("count");
+    const live = document.getElementById("live");
+    const prev = document.getElementById("prev");
+    const next = document.getElementById("next");
+    let index = 0;
+
+    function reveal(button, behavior) {
+      const scroller = thumbList;
+      const buttonBox = button.getBoundingClientRect();
+      const scrollerBox = scroller.getBoundingClientRect();
+      const nextScroll = { behavior };
+      if (buttonBox.top < scrollerBox.top - 1 || buttonBox.bottom > scrollerBox.bottom + 1) {
+        nextScroll.top = scroller.scrollTop + buttonBox.top - scrollerBox.top - 8;
+      }
+      if (buttonBox.left < scrollerBox.left - 1 || buttonBox.right > scrollerBox.right + 1) {
+        nextScroll.left = scroller.scrollLeft + buttonBox.left - scrollerBox.left - 8;
+      }
+      if ("top" in nextScroll || "left" in nextScroll) scroller.scrollTo(nextScroll);
+    }
+    function go(nextIndex, behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth") {
+      if (!slides.length) return;
+      const thumbHadFocus = thumbs.includes(document.activeElement);
+      index = Math.max(0, Math.min(slides.length - 1, nextIndex));
+      slides.forEach((slide, n) => slide.classList.toggle("is-active", n === index));
+      thumbs.forEach((button, n) => {
+        if (n === index) button.setAttribute("aria-current", "true");
+        else button.removeAttribute("aria-current");
+      });
+      count.textContent = `${index + 1} / ${slides.length}`;
+      prev.disabled = index === 0;
+      next.disabled = index === slides.length - 1;
+      const id = slides[index].id;
+      if (id && location.hash !== `#${id}`) history.replaceState(null, "", `#${id}`);
+      live.textContent = `Slide ${index + 1} of ${slides.length}. ${slideTitle(slides[index], index)}`;
+      if (thumbHadFocus) thumbs[index].focus({ preventScroll: true });
+      reveal(thumbs[index], behavior);
+    }
+
+    prev.addEventListener("click", () => go(index - 1));
+    next.addEventListener("click", () => go(index + 1));
+    window.addEventListener("hashchange", () => {
+      const found = slides.findIndex((slide) => slide.id === location.hash.slice(1));
+      if (found >= 0 && found !== index) go(found, "auto");
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const tag = document.activeElement?.tagName;
+      if (["INPUT", "TEXTAREA", "SELECT", "AUDIO", "VIDEO", "SUMMARY"].includes(tag) || document.activeElement?.isContentEditable || document.activeElement?.closest('[role="slider"], [role="spinbutton"], [role="listbox"]')) return;
+      const selection = document.getSelection();
+      if (selection && !selection.isCollapsed) return;
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const motion = reduced ? "auto" : "smooth";
+      if (event.key === "ArrowDown" || event.key === "ArrowRight" || event.key === "PageDown") {
+        event.preventDefault();
+        go(index + 1, motion);
+      } else if (event.key === "ArrowUp" || event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        go(index - 1, motion);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        go(0, motion);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        go(slides.length - 1, motion);
+      }
+    });
+
+    const hashed = slides.findIndex((slide) => slide.id && slide.id === location.hash.slice(1));
+    fitThumbs();
+    go(hashed >= 0 ? hashed : 0, "auto");
+    const watch = new ResizeObserver(() => fitThumbs());
+    watch.observe(thumbList);
+    window.addEventListener("resize", fitThumbs);
+  </script>
+</body>
+</html>

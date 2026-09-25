@@ -1,0 +1,150 @@
+<section class="slide title">
+  <p class="kicker">How it works · how to use it</p>
+  <h1>Agent HTML,<br>on every machine you own.</h1>
+  <div class="tail">
+    <hr class="rule">
+    <p class="lede">Shelf is a local-first store for HTML written by agents: one CLI, a desktop app that reads your disk, and a PWA for your phone.</p>
+    <p class="foot">TyrellD1/shelf · v0.1.0</p>
+  </div>
+</section>
+
+<section class="slide center">
+  <p class="kicker">The problem</p>
+  <h1>A finished report should not die in a temp folder.</h1>
+  <p class="lede">Agents write good HTML — explainers, decks, review checklists — and then the file sits in one project directory on one machine.</p>
+</section>
+
+<section class="slide">
+  <p class="kicker">Shape</p>
+  <h1>One writer, one store, three ways to read it.</h1>
+  <svg class="diagram" viewBox="0 0 1040 380" role="img" aria-label="The CLI writes to the local shelf at ~/.shelf. The desktop app reads the local shelf through the CLI. The CLI syncs with the Cloudflare Worker and Postgres. The PWA reads the same Worker over the network.">
+    <defs><marker id="shelf-shape-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10Z"/></marker></defs>
+    <g marker-end="url(#shelf-shape-arrow)">
+      <path class="edge" d="M150 86H300"/>
+      <path class="edge" d="M430 140H700"/>
+      <path class="edge dashed" d="M300 190V300H120"/>
+      <path class="edge dashed" d="M755 190V276"/>
+    </g>
+    <rect class="box" x="20" y="41" width="130" height="90" rx="8"/>
+    <rect class="box-decision" x="300" y="41" width="130" height="90" rx="8"/>
+    <rect class="box" x="700" y="41" width="300" height="90" rx="8"/>
+    <rect class="box" x="20" y="300" width="280" height="70" rx="8"/>
+    <rect class="box" x="640" y="276" width="200" height="80" rx="8"/>
+    <g class="name" font-size="22" text-anchor="middle" dominant-baseline="middle">
+      <text x="85" y="76">agent</text>
+      <text x="85" y="104">harness</text>
+      <text x="365" y="66">shelf CLI</text>
+      <text x="365" y="100">~/.shelf</text>
+      <text x="850" y="76">Cloudflare Worker</text>
+      <text x="850" y="104">+ Postgres (Neon)</text>
+      <text x="160" y="336">desktop app · reads the disk</text>
+      <text x="740" y="316">PWA · reads the API</text>
+    </g>
+    <text class="note" x="225" y="70" font-size="17" text-anchor="middle">write</text>
+    <text class="note" x="560" y="128" font-size="17" text-anchor="middle">sync · push / pull</text>
+    <text class="note" x="245" y="268" font-size="17" text-anchor="middle">status · list · read</text>
+    <text class="note" x="790" y="238" font-size="17" text-anchor="middle">HTTPS + session</text>
+  </svg>
+  <p class="foot">Solid = the write path · dashed = the read paths</p>
+</section>
+
+<section class="slide">
+  <p class="kicker">The write path</p>
+  <h1>Write once; the shelf handles the rest.</h1>
+  <div class="tail stack">
+    <div class="flow" role="img" aria-label="Read the bytes, hash them with sha256, store them under the machine id, push the row to the server, then mark it synced.">
+      <div class="node">read bytes</div><i class="arrow" aria-hidden="true"></i>
+      <div class="node">sha256</div><i class="arrow" aria-hidden="true"></i>
+      <div class="node">store in ~/.shelf</div><i class="arrow" aria-hidden="true"></i>
+      <div class="node decision">push row</div><i class="arrow" aria-hidden="true"></i>
+      <div class="node">synced</div>
+    </div>
+    <p class="lede">The push is the only networked step, and a failure there never loses the file: it stays local and is pushed by the next <span class="mono">shelf sync</span>.</p>
+  </div>
+</section>
+
+<section class="slide">
+  <p class="kicker">What to call</p>
+  <h1>One command at the end of a task.</h1>
+  <div class="split">
+    <pre class="code">$ shelf write ./outputs/q3-report.html --json
+{
+  "ok": true,
+  "action": "created",
+  "path": "outputs/q3-report.html",
+  "file": {
+    "id": "sf_a41c9f0b7d3e28a5c6b1",
+    "machineId": "tys-macbook-pro",
+    "bytes": 48213
+  },
+  "pushed": true
+}</pre>
+    <div class="stack">
+      <h2>Or write and look</h2>
+      <p class="muted"><span class="mono">shelf open &lt;path&gt;</span> writes the file if it is not on the shelf yet, then brings the desktop app forward on that document.</p>
+      <p class="muted">Agents only ever need these two calls. The html, slides and review-checklist skills end by telling the agent to run one of them.</p>
+    </div>
+  </div>
+  <p class="foot">Real output shape · ids are derived, not random</p>
+</section>
+
+<section class="slide">
+  <p class="kicker">Use</p>
+  <h1>Eight commands, one story.</h1>
+  <table>
+    <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+    <tbody>
+      <tr><td><span class="mono">shelf setup</span></td><td>Browser handoff, stores a long-lived key, sets this machine's id</td></tr>
+      <tr><td><span class="mono">shelf write &lt;path&gt;</span></td><td>Store and push a file; existing paths become -v2, -v3, …</td></tr>
+      <tr><td><span class="mono">shelf open &lt;path&gt;</span></td><td>Write if needed, then open it in the desktop app</td></tr>
+      <tr><td><span class="mono">shelf list</span></td><td>Newest first, searchable and filterable by machine</td></tr>
+      <tr><td><span class="mono">shelf sync</span></td><td>Push local writes, pull what the other machines wrote</td></tr>
+      <tr><td><span class="mono">shelf status</span></td><td>Account, machine id, counts, pending pushes, last sync</td></tr>
+    </tbody>
+  </table>
+  <div class="tail"><p class="foot">Every command takes <span class="mono">--json</span>; add <span class="mono">--stream</span> for progress lines before the result.</p></div>
+</section>
+
+<section class="slide">
+  <p class="kicker">First run, once per machine</p>
+  <h1>Authorize in the browser; never think about it again.</h1>
+  <div class="timeline">
+    <article><p class="foot">1</p><h2>Install</h2><p><span class="mono">curl … install.sh | bash</span> drops the CLI in ~/.local/bin.</p></article>
+    <article><p class="foot">2</p><h2>Authorize</h2><p><span class="mono">shelf setup</span> opens the web app; you click once and the key lands on a loopback port.</p></article>
+    <article><p class="foot">3</p><h2>Name the machine</h2><p>It prompts for a machine id (defaulting to your hostname). That id colours every row you write.</p></article>
+  </div>
+  <div class="tail"><p class="callout"><strong>After that:</strong> all calls are authenticated and attributed to that machine id.</p><p class="foot">The key never expires; <span class="mono">shelf logout</span> drops it locally, running setup again rotates it.</p></div>
+</section>
+
+<section class="slide">
+  <p class="kicker">Reading it back</p>
+  <h1>Same shelf, whichever screen is nearest.</h1>
+  <div class="grid">
+    <article class="card"><h2>Desktop (macOS)</h2><p>Native window, local-first. Documents come off your disk with a strict content policy — fast, and offline. <span class="mono">⌘P</span> searches everything.</p></article>
+    <article class="card"><h2>Phone (PWA)</h2><p>Add the web app to your home screen. The same UI, reading the same API over the network.</p></article>
+    <article class="card"><h2>Terminal</h2><p><span class="mono">shelf list</span> and <span class="mono">shelf read</span> for the agent, a script, or a quick look.</p></article>
+  </div>
+  <div class="tail"><hr class="rule"><p class="lede">The list is newest-first with a search box, machine filter chips, and a colour per machine.</p></div>
+</section>
+
+<section class="slide">
+  <p class="kicker">Everyday cases</p>
+  <h1>The behaviour you should expect without reading the code.</h1>
+  <table>
+    <thead><tr><th scope="col">You do</th><th scope="col">Shelf does</th></tr></thead>
+    <tbody>
+      <tr><td>Write the same path with new content</td><td>Creates <span class="mono">report-v2.html</span>; the old version stays readable</td></tr>
+      <tr><td>Write identical bytes again</td><td>No-op — nothing uploaded, nothing duplicated</td></tr>
+      <tr><td>Write offline</td><td>Stores locally, reports a warning, pushes on the next sync</td></tr>
+      <tr><td>Sync on a second machine</td><td>Pulls the other machine's files into <span class="mono">~/.shelf/html/&lt;machine&gt;/…</span></td></tr>
+    </tbody>
+  </table>
+  <div class="tail"><p class="foot">There is no delete by design: paths are immutable and cheap, so a shelf only grows.</p></div>
+</section>
+
+<section class="slide center">
+  <p class="kicker">Next</p>
+  <h1>Start with one write.</h1>
+  <p class="lede"><span class="mono">shelf setup</span> → <span class="mono">shelf write ./anything.html</span> → <span class="mono">shelf open ./anything.html</span></p>
+  <p class="foot">Repo: github.com/TyrellD1/shelf · Design notes: docs/DESIGN.md · Agent skill: skills/shelf/SKILL.md</p>
+</section>

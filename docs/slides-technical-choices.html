@@ -1,0 +1,150 @@
+<section class="slide title">
+  <p class="kicker">Technical decisions · v0.1.0</p>
+  <h1>The choices that<br>carry Shelf.</h1>
+  <div class="tail">
+    <hr class="rule">
+    <p class="lede">Nine decisions about identity, sync, hosting and rendering — and the cost each one accepts.</p>
+    <p class="foot">docs/DESIGN.md in TyrellD1/shelf</p>
+  </div>
+</section>
+
+<section class="slide center">
+  <p class="kicker">The spine</p>
+  <h1>Local bytes are the truth; every map is derived.</h1>
+  <p class="lede">`~/.shelf/html/&lt;machine&gt;/&lt;path&gt;` holds the documents. `index.json` is a cache of metadata that can be deleted and rebuilt by scanning the store.</p>
+</section>
+
+<section class="slide">
+  <p class="kicker">Authority</p>
+  <h1>One writer, three readers, no second opinion.</h1>
+  <svg class="diagram" viewBox="0 0 1040 330" role="img" aria-label="The CLI is the only writer to the local store. Both front ends read through the CLI, so the window and the terminal cannot disagree. The server mirrors the store for other machines.">
+    <defs><marker id="shelf-authority-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10Z"/></marker></defs>
+    <g marker-end="url(#shelf-authority-arrow)">
+      <path class="edge" d="M170 100H330"/>
+      <path class="edge" d="M170 250H330"/>
+      <path class="edge" d="M510 120H690"/>
+      <path class="edge dashed" d="M690 200H510"/>
+    </g>
+    <rect class="box" x="30" y="60" width="140" height="80" rx="8"/>
+    <rect class="box" x="30" y="210" width="140" height="80" rx="8"/>
+    <rect class="box-decision" x="330" y="128" width="180" height="94" rx="8"/>
+    <rect class="box" x="690" y="60" width="320" height="80" rx="8"/>
+    <rect class="box" x="690" y="210" width="320" height="80" rx="8"/>
+    <g class="name" font-size="22" text-anchor="middle" dominant-baseline="middle">
+      <text x="100" y="100">desktop app</text>
+      <text x="100" y="250">agent / terminal</text>
+      <text x="420" y="160">shelf CLI</text>
+      <text x="420" y="192">writes ~/.shelf</text>
+      <text x="850" y="100">Postgres · the mirror</text>
+      <text x="850" y="250">index.json · derived</text>
+    </g>
+    <text class="note" x="250" y="88" font-size="17" text-anchor="middle">invokes</text>
+    <text class="note" x="250" y="238" font-size="17" text-anchor="middle">invokes</text>
+    <text class="note" x="600" y="106" font-size="17" text-anchor="middle">push</text>
+    <text class="note" x="600" y="266" font-size="17" text-anchor="middle">rebuild</text>
+  </svg>
+  <p class="foot">Both front ends read through the same process boundary, which is why they never disagree about what is on the shelf.</p>
+</section>
+
+<section class="slide">
+  <p class="kicker">Identity</p>
+  <h1>Ids are derived, not assigned.</h1>
+  <div class="split">
+    <pre class="code">fileId(machine, path) =
+  "sf_" + sha1(machine + "\0|" + path).slice(0, 20)
+
+fileId("mac-mini", "q3.html")
+  → sf_7c2b1e9f0a4d6b8c3a5e</pre>
+    <div class="stack">
+      <h2>What that buys</h2>
+      <p class="muted">A local store that lost its index reconstructs the same ids the server already knows. <span class="mono">shelf read &lt;id&gt;</span> works from any machine.</p>
+      <p class="muted">The server recomputes the id and rejects a mismatch, so a client cannot address another path's row.</p>
+    </div>
+  </div>
+  <p class="foot">sha1 here is a naming hash, never content integrity — that is sha256.</p>
+</section>
+
+<section class="slide">
+  <p class="kicker">Decisions</p>
+  <h1>Each choice buys one property and costs one thing.</h1>
+  <table>
+    <thead><tr><th scope="col">Decision</th><th scope="col">Buys</th><th scope="col">Costs</th></tr></thead>
+    <tbody>
+      <tr><td>Immutable paths (<span class="mono">-v2</span>, <span class="mono">-v3</span>)</td><td>Every version stays addressable; sync rows never change identity</td><td>The shelf grows; names get suffixes</td></tr>
+      <tr><td>sha256 content addressing</td><td>Re-runs are no-ops; a failed sync only moves what changed</td><td>Hashing on every write</td></tr>
+      <tr><td>Cursor sync on server <span class="mono">edited_at</span></td><td>No client clocks, no lost deltas, plain SQL</td><td>One wall clock lives in the database</td></tr>
+      <tr><td>CLI as the only store implementation</td><td>Terminal and window can never disagree</td><td>~60 ms process spawn per read</td></tr>
+      <tr><td>Single-user allowlist auth</td><td>No sharing, roles, or invitation surface</td><td>Not usable by anyone else as-is</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="slide">
+  <p class="kicker">Rendering</p>
+  <h1>Artifacts may run code, but never reach the network.</h1>
+  <div class="split wide">
+    <div class="stack">
+      <div class="stat"><b>default-src 'none'</b><span>the whole policy for a local document</span><small>script-src and style-src allow <span class="mono">'unsafe-inline'</span> only</small></div>
+      <p class="muted">Desktop: the reader iframe points at <span class="mono">shelf://localhost/view/&lt;id&gt;</span>. The Rust handler runs <span class="mono">shelf read</span> and returns the bytes with that header.</p>
+      <p class="muted">Phone: the PWA renders the same document from an object URL inside a sandboxed iframe with an opaque origin.</p>
+    </div>
+    <div class="stack">
+      <h2>Works</h2>
+      <p class="muted">Inline scripts, inline styles, data: and blob: images, own <span class="mono">localStorage</span> on desktop.</p>
+      <h2>Blocked</h2>
+      <p class="muted">CDNs, remote fonts, beacons, <span class="mono">fetch</span>, form posts, base URLs, and <span class="mono">new Function</span> — <span class="mono">unsafe-eval</span> is deliberately absent.</p>
+    </div>
+  </div>
+  <p class="foot">A document that needs the network is a document that must inline its dependencies instead.</p>
+</section>
+
+<section class="slide">
+  <p class="kicker">Hosting</p>
+  <h1>Cheap, programmable, and boring to operate.</h1>
+  <div class="grid">
+    <article class="card"><h2>Cloudflare Worker</h2><p>One deployed unit serves the API, the auth pages and the PWA. Deploy is one command; there is no server to patch.</p></article>
+    <article class="card"><h2>Postgres on Neon</h2><p>One table, one text column for the HTML, capped at 5 MB per document.</p></article>
+    <article class="card"><h2>Hyperdrive in front</h2><p>Production uses <span class="mono">pg</span> over a pooled connection; local dev uses the same driver against a local Postgres, so both paths run identical SQL.</p></article>
+  </div>
+  <div class="tail"><p class="callout">Push-back on the brief: Cloudflare D1 would remove a vendor and a config step. Postgres was kept because the data is worth more than the convenience.</p></div>
+</section>
+
+<section class="slide">
+  <p class="kicker">Alternatives</p>
+  <h1>What was considered and rejected.</h1>
+  <table>
+    <thead><tr><th scope="col">Rejected</th><th scope="col">Why not</th></tr></thead>
+    <tbody>
+      <tr><td>SQLite for the local map</td><td>Hundreds of small files; a JSON map is milliseconds and keeps the CLI dependency-free. The <span class="mono">store.ts</span> boundary is where it would change.</td></tr>
+      <tr><td>Device-code auth (RFC 8628)</td><td>Works over SSH, but the loopback redirect is one click instead of typing a code — and this is a single-user desktop tool.</td></tr>
+      <tr><td>Object storage for HTML</td><td>Signed URLs, lifecycle rules and a second consistency story, for payloads smaller than a photo.</td></tr>
+      <tr><td>Embedding the store in the Tauri app</td><td>Two implementations of the same rules is how the window and the terminal start disagreeing.</td></tr>
+      <tr><td>A background sync daemon</td><td>Out of scope: sync runs on app open, on chip click, or when the agent calls <span class="mono">shelf sync</span>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="slide">
+  <p class="kicker">Evidence</p>
+  <h1>What proves it works today.</h1>
+  <div class="grid">
+    <div class="stat"><b>35</b><span>unit tests across ids, paths, flags, index, UI logic</span></div>
+    <div class="stat"><b>30</b><span>end-to-end smoke checks against a local Worker + Postgres</span></div>
+    <div class="stat"><b>2</b><span>Rust tests for deep links and the CLI-backed reader</span></div>
+  </div>
+  <div class="tail">
+    <p class="callout">The smoke run drives the real browser handoff, writes, versions, replaces, and pulls a file written by a second machine into the local store.</p>
+    <p class="foot">CLI bundles to one 53 KB file with no runtime dependencies beyond Node built-ins.</p>
+  </div>
+</section>
+
+<section class="slide center">
+  <p class="kicker">Limits</p>
+  <h1>Honest gaps, in order of likely annoyance.</h1>
+  <ul class="lede">
+    <li>The desktop bundle is unsigned: first launch needs right-click → Open, or signing with an Apple certificate.</li>
+    <li>No delete or rename — a deliberate consequence of immutable paths, and the first change I would make.</li>
+    <li>Sync is manual, never background.</li>
+    <li>Search is a path <span class="mono">ILIKE</span> locally and server-side; full-text is the upgrade at a few thousand documents.</li>
+  </ul>
+</section>

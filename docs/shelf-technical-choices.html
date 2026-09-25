@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; media-src data:; base-uri 'none'; form-action 'none'">
+  <script>
+    (() => {
+      let saved;
+      try { saved = localStorage.getItem("html-theme"); } catch {}
+      const preference = saved === "light" || saved === "dark" ? saved : "system";
+      document.documentElement.dataset.themePreference = preference;
+      document.documentElement.dataset.theme = preference === "system"
+        ? matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+        : preference;
+    })();
+  </script>
+  <title>Shelf — key technical choices</title>
+  <meta name="description" content="The decisions behind Shelf: identity, sync, hosting, rendering, and the alternatives rejected.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23222222'/%3E%3Cpath d='M8 11h16M8 16h16M8 21h10' fill='none' stroke='white' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E">
+  <style>
+    /* /html tokens, plus the deck chrome. Slide type is in cqw of the 16:9 canvas. */
+    :root {
+      --page: #ffffff;
+      --ink: #242424;
+      --muted: #686868;
+      --quiet: #767676;
+      --line: #e4e4e4;
+      --surface: #f7f7f7;
+      --surface-deep: #ededed;
+      --strong: #2c2c2c;
+      --series-main: #303030;
+      --series-secondary: #929292;
+      --series-bar: #bcbcbc;
+      --table-rule: #bdbdbd;
+      --selection: #dedede;
+      --selection-ink: #161616;
+      --diagram-node: #ffffff;
+      --diagram-strong: #303030;
+      --diagram-border: #b4b4b4;
+      --diagram-emphasis-border: #a0a0a0;
+      --diagram-decision: #e9e9e9;
+      --diagram-connector: #767676;
+      --diagram-secondary: #999999;
+      --diagram-lifeline: #c2c2c2;
+      --diagram-label-wash: rgba(247, 247, 247, .5);
+      --diagram-shadow: rgba(0, 0, 0, .2);
+      --diagram-shadow-strong: rgba(0, 0, 0, .4);
+      --chrome: #ececec;
+      color-scheme: light;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --radius: 8px;
+    }
+    :root[data-theme="dark"] {
+      --page: #171717;
+      --ink: #e6e6e6;
+      --muted: #adadad;
+      --quiet: #999999;
+      --line: #353535;
+      --surface: #202020;
+      --surface-deep: #2c2c2c;
+      --strong: #d9d9d9;
+      --series-main: #e0e0e0;
+      --series-secondary: #8f8f8f;
+      --series-bar: #747474;
+      --table-rule: #626262;
+      --selection: #505050;
+      --selection-ink: #ffffff;
+      --diagram-node: #202020;
+      --diagram-strong: #dedede;
+      --diagram-border: #666666;
+      --diagram-emphasis-border: #808080;
+      --diagram-decision: #363636;
+      --diagram-connector: #a0a0a0;
+      --diagram-secondary: #999999;
+      --diagram-lifeline: #5c5c5c;
+      --diagram-label-wash: rgba(32, 32, 32, .8);
+      --chrome: #101010;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      height: 100dvh;
+      overflow: hidden;
+      background: var(--chrome);
+      color: var(--ink);
+      font-family: var(--font);
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: var(--selection); color: var(--selection-ink); }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+    button { font: inherit; color: inherit; }
+    .app { display: flex; height: 100%; min-height: 0; }
+    .rail {
+      width: 292px;
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-right: 1px solid var(--line);
+      background: var(--chrome);
+      user-select: none;
+    }
+    .thumbs {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 16px 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--line) transparent;
+    }
+    .thumb {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      column-gap: 10px;
+      align-items: start;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+      cursor: pointer;
+    }
+    .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1;
+      padding-top: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+    .thumb[aria-current="true"] { color: var(--ink); }
+    .thumb-frame {
+      position: relative;
+      display: block;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      border-radius: var(--radius);
+      background: var(--page);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .thumb[aria-current="true"] .thumb-frame {
+      box-shadow: 0 0 0 2px var(--chrome), 0 0 0 4px var(--ink);
+    }
+    .thumb:hover .thumb-frame { box-shadow: inset 0 0 0 1px var(--muted); }
+    .thumb[aria-current="true"]:hover .thumb-frame {
+      box-shadow: 0 0 0 2px var(--chrome), 0 0 0 4px var(--ink);
+    }
+    .thumb-scale {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1280px;
+      height: 720px;
+      transform-origin: top left;
+      pointer-events: none;
+    }
+    .options {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--line);
+    }
+    .icon-btn, .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      flex: none;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .icon-btn:hover, .theme-toggle:hover { color: var(--ink); background: var(--surface); }
+    .icon-btn:disabled { opacity: .35; cursor: default; background: transparent; color: var(--muted); }
+    .icon-btn svg, .theme-toggle svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .theme-toggle .sun { display: none; }
+    [data-theme="dark"] .theme-toggle .sun { display: block; }
+    [data-theme="dark"] .theme-toggle .moon { display: none; }
+    .count {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .stage {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      overflow: hidden;
+      container-type: size;
+      background: var(--chrome);
+    }
+    #scaler {
+      position: relative;
+      width: min(100cqw, calc(100cqh * 16 / 9));
+      aspect-ratio: 16 / 9;
+    }
+    #slides { position: absolute; inset: 0; }
+    .slide {
+      display: flex;
+      flex-direction: column;
+      width: 1280px;
+      height: 720px;
+      overflow: hidden;
+      background: var(--page);
+      color: var(--ink);
+      container-type: inline-size;
+    }
+    .canvas {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      font-size: 1.72cqw;
+      line-height: 1.45;
+      letter-spacing: -.015em;
+      padding: 5.2cqw 5.8cqw 4.6cqw;
+    }
+    #slides > .slide { display: none; width: 100%; height: 100%; }
+    #slides > .slide.is-active { display: flex; }
+    .thumb-scale .slide { display: flex !important; }
+    .slide.title .canvas { padding: 5.8cqw 6.2cqw 5cqw; }
+    .slide.center .canvas { justify-content: center; }
+    .slide .canvas > * + * { margin-top: 2.1cqw; }
+    .slide.title .canvas > * + * { margin-top: 2.6cqw; }
+    .canvas > .tail, .slide.title .canvas > .tail { margin-top: auto; padding-top: 2cqw; }
+    .kicker, .foot, .slide th, .branches .quiet {
+      font-family: var(--mono);
+      font-weight: 500;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .kicker { margin: 0; font-size: 1.02cqw; color: var(--muted); }
+    .slide h1, .slide h2, .slide h3, .slide p, .slide blockquote, .slide figure { margin: 0; }
+    .canvas > :is(h1, h2, p, ul, ol, table, pre, blockquote) { flex-shrink: 0; }
+    .slide h1 {
+      font-size: 3.45cqw;
+      line-height: 1.08;
+      font-weight: 600;
+      letter-spacing: -.035em;
+      max-width: 18em;
+      text-wrap: balance;
+    }
+    .slide.title h1 {
+      font-size: 6.6cqw;
+      line-height: .96;
+      letter-spacing: -.045em;
+      max-width: 11em;
+    }
+    .slide.center h1 { font-size: 4.8cqw; line-height: 1.02; max-width: 14em; }
+    .slide h2 { font-size: 1.7cqw; line-height: 1.25; font-weight: 600; letter-spacing: -.02em; }
+    .slide h3 { font-size: 1.45cqw; line-height: 1.3; font-weight: 600; letter-spacing: -.015em; }
+    .slide p { max-width: 36em; }
+    .slide .lede {
+      max-width: 28em;
+      font-size: 2.05cqw;
+      line-height: 1.35;
+      color: var(--muted);
+      letter-spacing: -.02em;
+    }
+    .foot { font-size: 1.02cqw; color: var(--quiet); }
+    .slide p.foot { max-width: none; }
+    .slide .canvas > .kicker + h1 { margin-top: 1.3cqw; }
+    .slide .tail > * + * { margin-top: 1.7cqw; }
+    .tail .foot { margin-top: 3.2cqw; }
+    hr.rule { width: 4.4cqw; height: .26cqw; margin: 0; border: 0; background: var(--strong); }
+    .muted { color: var(--muted); }
+    .quiet { color: var(--quiet); }
+    .strong { font-weight: 600; }
+    .slide a { color: inherit; text-underline-offset: .25em; }
+    .slide :not(pre) > code {
+      font-family: var(--mono);
+      font-size: .84em;
+      background: var(--surface-deep);
+      padding: .08em .35em;
+      border-radius: .25cqw;
+    }
+    .slide ul, .slide ol {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25cqw;
+    }
+    .slide li { position: relative; padding-left: 1.8cqw; }
+    .slide ul li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: .72em;
+      width: .85cqw;
+      height: .12cqw;
+      background: var(--strong);
+    }
+    .slide ol { counter-reset: step; }
+    .slide ol li { counter-increment: step; }
+    .slide ol li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: .15em;
+      font-family: var(--mono);
+      font-size: .72em;
+      color: var(--quiet);
+    }
+    .split {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3.6cqw;
+    }
+    .split > * { min-width: 0; min-height: 0; }
+    .stack { display: flex; flex-direction: column; gap: 1.15cqw; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.4cqw; }
+    .grid.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card { background: var(--surface); border-radius: .7cqw; padding: 1.6cqw 1.7cqw; }
+    .slide .card > * + * { margin-top: .7cqw; }
+    .card p { color: var(--muted); font-size: 1.32cqw; line-height: 1.45; }
+    .stat b {
+      display: block;
+      font-size: 4.8cqw;
+      font-weight: 600;
+      letter-spacing: -.045em;
+      line-height: .95;
+    }
+    .stat span { display: block; margin-top: .7cqw; color: var(--muted); font-size: 1.25cqw; font-weight: 400; }
+    .callout {
+      border-left: .18cqw solid var(--strong);
+      background: var(--surface);
+      padding: 1.3cqw 1.6cqw;
+      font-size: 1.5cqw;
+      line-height: 1.45;
+    }
+    .slide blockquote {
+      font-size: 3.4cqw;
+      font-weight: 600;
+      letter-spacing: -.03em;
+      line-height: 1.18;
+      max-width: 18em;
+      text-wrap: balance;
+    }
+    .slide table { width: 100%; border-collapse: collapse; font-size: 1.5cqw; line-height: 1.4; }
+    .slide th {
+      text-align: left;
+      font-size: 1cqw;
+      color: var(--muted);
+      padding: 0 1.6cqw .9cqw 0;
+      border-bottom: 1px solid var(--table-rule);
+    }
+    .slide td {
+      padding: 1.15cqw 1.6cqw 1.15cqw 0;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    .slide td:first-child { font-weight: 600; }
+    .slide td:last-child, .slide th:last-child { padding-right: 0; }
+    pre.code {
+      margin: 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: .7cqw;
+      padding: 1.5cqw 1.7cqw;
+      overflow: auto;
+      font-family: var(--mono);
+      font-size: 1.28cqw;
+      line-height: 1.6;
+      letter-spacing: 0;
+    }
+    .canvas > .chart-block, .split .chart-block { flex: 1; min-height: 0; }
+    .chart-block { display: flex; flex-direction: column; justify-content: center; }
+    .chart-block figcaption {
+      display: flex;
+      justify-content: flex-start;
+      align-items: baseline;
+      gap: 1cqw;
+      margin-bottom: .7cqw;
+      font-size: 1.25cqw;
+      font-weight: 600;
+      letter-spacing: -.01em;
+    }
+    .chart-block figcaption span { font-weight: 400; color: var(--muted); font-size: 1.05cqw; }
+    .chart { display: block; width: 100%; height: auto; aspect-ratio: 720 / 340; min-height: 0; }
+    .chart text { font-family: var(--font); }
+    .chart .grid { stroke: var(--line); stroke-width: 1; }
+    .chart .tick { fill: var(--muted); font-size: 15px; }
+    .chart .value { fill: var(--ink); font-weight: 600; font-size: 17px; }
+    .split .chart .tick { font-size: 18px; }
+    .split .chart .value { font-size: 20px; }
+    .chart .series-main { fill: none; stroke: var(--series-main); stroke-width: 2.5; }
+    .chart .series-alt { fill: none; stroke: var(--series-secondary); stroke-width: 2; stroke-dasharray: 6 5; }
+    .chart .series-third { fill: none; stroke: var(--quiet); stroke-width: 2; stroke-dasharray: 1.5 4; }
+    .chart .bar-0 { fill: var(--series-main); }
+    .chart .bar-1 { fill: var(--series-secondary); }
+    .chart .bar-2 { fill: var(--quiet); }
+    .diagram { display: block; width: 100%; height: auto; min-height: 0; flex: 1; }
+    .diagram text { font-family: var(--font); fill: var(--ink); }
+    .diagram .box, .diagram .box-decision { stroke-width: 1.5; }
+    .diagram .box { fill: var(--diagram-node); stroke: var(--diagram-border); }
+    .diagram .box-decision { fill: var(--diagram-decision); stroke: var(--diagram-border); }
+    .diagram .edge { stroke: var(--diagram-connector); stroke-width: 1.5; fill: none; }
+    .diagram .name { font-weight: 600; }
+    .diagram .note, .diagram .note text { fill: var(--muted); font-family: var(--mono); }
+    .flow, .branches { display: flex; flex-wrap: wrap; align-items: center; gap: 1cqw; }
+    .branches { align-items: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: 1.4cqw; }
+    .node {
+      border: 1px solid var(--diagram-border);
+      background: var(--diagram-node);
+      color: var(--ink);
+      border-radius: .7cqw;
+      padding: 1.15cqw 1.45cqw;
+      font-size: 1.5cqw;
+      font-weight: 600;
+      letter-spacing: -.02em;
+    }
+    .node.decision { background: var(--diagram-decision); }
+    .arrow {
+      width: 2.4cqw;
+      height: 0;
+      border-top: 1.5px solid var(--diagram-connector);
+      position: relative;
+      flex: none;
+    }
+    .arrow::after {
+      content: "";
+      position: absolute;
+      right: -.05cqw;
+      top: -.38cqw;
+      border-width: .32cqw 0 .32cqw .5cqw;
+      border-style: solid;
+      border-color: transparent transparent transparent var(--diagram-connector);
+    }
+    .branches .node { width: fit-content; max-width: 100%; }
+    .branches .quiet { font-size: .95cqw; margin: 0 0 .55cqw; }
+    /* Authoring primitives: open comparisons, proportional parts, ordered milestones. */
+    .split.wide { grid-template-columns: 1fr 1.7fr; }
+    .split > .stack { justify-content: center; }
+    .stat.hero b { font-size: 7.4cqw; }
+    .stat small { display: block; margin-top: 1.2cqw; font-size: 1.2cqw; color: var(--quiet); }
+    .compare { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 3cqw; flex: 1; }
+    .compare .stat { padding: 2.5cqw 0; border-top: 1px solid var(--line); }
+    .compare .stat b { margin: 1.5cqw 0; font-size: 7.4cqw; }
+    .compare .direction { font-size: 3.2cqw; color: var(--quiet); }
+    .composition { display: flex; height: 6cqw; gap: .3cqw; }
+    .composition > * { flex: var(--share) 0 0; min-width: 0; background: var(--series-main); }
+    .composition > :nth-child(2) { background: var(--series-secondary); }
+    .composition > :nth-child(3) { background: var(--series-bar); }
+    .composition > :nth-child(4) { background: var(--surface-deep); border: 1px solid var(--diagram-border); }
+    .key { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2cqw; margin-top: 2cqw; }
+    .key b { display: block; font-size: 2.7cqw; font-weight: 600; }
+    .key span { color: var(--muted); font-size: 1.35cqw; }
+    .timeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4cqw; padding-top: 3cqw; }
+    .timeline > * { border-top: 2px solid var(--line); padding-top: 1.4cqw; position: relative; }
+    .timeline > *::before { content: ""; position: absolute; top: -.45cqw; left: 0; width: .7cqw; height: .7cqw; border-radius: 50%; background: var(--ink); }
+    .slide .timeline h2 { margin: 1.2cqw 0 .7cqw; }
+    .timeline p:not(.foot) { color: var(--muted); font-size: 1.45cqw; }
+    .slide .matrix th { text-transform: none; letter-spacing: 0; font-family: var(--font); font-size: 1.35cqw; }
+    .slide .matrix td { width: 38%; padding: 2cqw; border: 1px solid var(--line); font-weight: 400; }
+    .matrix td.focus { background: var(--surface-deep); }
+    .matrix td strong { display: block; margin-bottom: .7cqw; }
+    .matrix td span { color: var(--muted); font-size: 1.3cqw; }
+    .chart .zero { stroke: var(--diagram-border); stroke-width: 1.3; }
+    .chart .point-0 { fill: var(--series-main); }
+    .chart .point-1 { fill: var(--series-secondary); }
+    .chart .point-2 { fill: var(--quiet); }
+    .chart .leader { fill: none; stroke: var(--quiet); stroke-width: 1; }
+    .diagram .edge.dashed { stroke-dasharray: 7 6; }
+    .diagram .arrowhead { fill: var(--diagram-connector); }
+    .exit-present { display: none; position: fixed; top: 12px; right: 12px; z-index: 10; background: var(--page); }
+    .app.is-presenting .exit-present { display: inline-flex; }
+    .app.is-presenting .rail { display: none; }
+    .app.is-presenting .stage { padding: 0; background: var(--page); }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+    @media (max-width: 800px) {
+      .app { flex-direction: column; }
+      .stage { order: 1; padding: 12px; }
+      .rail { order: 2; width: auto; border-right: 0; border-top: 1px solid var(--line); }
+      .thumbs {
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        align-items: center;
+        height: 108px;
+        flex: none;
+      }
+      .thumb { width: 176px; flex: none; }
+    }
+    @media (pointer: coarse) {
+      .icon-btn, .theme-toggle { width: 44px; height: 44px; }
+    }
+    @media print {
+      @page { size: 13.333in 7.5in; margin: 0; }
+      body, .app, .stage { display: block; height: auto; overflow: visible; background: #fff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .rail, .sr-only, .exit-present { display: none !important; }
+      .stage { container-type: normal; padding: 0; }
+      #scaler { width: 1280px; aspect-ratio: auto; }
+      #slides { position: static; }
+      #slides > .slide {
+        display: flex !important;
+        width: 1280px;
+        height: 720px;
+        break-after: page;
+        position: relative;
+      }
+    }
+  </style>
+  <style id="deck-custom"></style>
+</head>
+<body>
+  <div class="app">
+    <nav class="rail" aria-label="Slides">
+      <div class="thumbs" id="thumbs"></div>
+      <div class="options">
+        <button class="icon-btn" id="prev" type="button" aria-label="Previous slide" title="Previous slide">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 14l6-6 6 6"/></svg>
+        </button>
+        <button class="icon-btn" id="next" type="button" aria-label="Next slide" title="Next slide">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10l6 6 6-6"/></svg>
+        </button>
+        <button class="icon-btn" id="present" type="button" aria-label="Enter full screen" title="Full screen · Esc to exit" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg>
+        </button>
+        <span class="count" id="count">1 / 1</span>
+        <button class="theme-toggle" type="button" aria-label="Toggle light and dark theme" title="Toggle light and dark theme">
+          <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+        </button>
+      </div>
+    </nav>
+    <main class="stage">
+      <div id="scaler">
+        <div id="slides">
+<section class="slide title" id="slide-1">
+  <p class="kicker">Technical decisions · v0.1.0</p>
+  <h1>The choices that<br>carry Shelf.</h1>
+  <div class="tail">
+    <hr class="rule">
+    <p class="lede">Nine decisions about identity, sync, hosting and rendering — and the cost each one accepts.</p>
+    <p class="foot">docs/DESIGN.md in TyrellD1/shelf</p>
+  </div>
+</section>
+
+<section class="slide center" id="slide-2">
+  <p class="kicker">The spine</p>
+  <h1>Local bytes are the truth; every map is derived.</h1>
+  <p class="lede">`~/.shelf/html/&lt;machine&gt;/&lt;path&gt;` holds the documents. `index.json` is a cache of metadata that can be deleted and rebuilt by scanning the store.</p>
+</section>
+
+<section class="slide" id="slide-3">
+  <p class="kicker">Authority</p>
+  <h1>One writer, three readers, no second opinion.</h1>
+  <svg class="diagram" viewBox="0 0 1040 330" role="img" aria-label="The CLI is the only writer to the local store. Both front ends read through the CLI, so the window and the terminal cannot disagree. The server mirrors the store for other machines.">
+    <defs><marker id="shelf-authority-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10Z"/></marker></defs>
+    <g marker-end="url(#shelf-authority-arrow)">
+      <path class="edge" d="M170 100H330"/>
+      <path class="edge" d="M170 250H330"/>
+      <path class="edge" d="M510 120H690"/>
+      <path class="edge dashed" d="M690 200H510"/>
+    </g>
+    <rect class="box" x="30" y="60" width="140" height="80" rx="8"/>
+    <rect class="box" x="30" y="210" width="140" height="80" rx="8"/>
+    <rect class="box-decision" x="330" y="128" width="180" height="94" rx="8"/>
+    <rect class="box" x="690" y="60" width="320" height="80" rx="8"/>
+    <rect class="box" x="690" y="210" width="320" height="80" rx="8"/>
+    <g class="name" font-size="22" text-anchor="middle" dominant-baseline="middle">
+      <text x="100" y="100">desktop app</text>
+      <text x="100" y="250">agent / terminal</text>
+      <text x="420" y="160">shelf CLI</text>
+      <text x="420" y="192">writes ~/.shelf</text>
+      <text x="850" y="100">Postgres · the mirror</text>
+      <text x="850" y="250">index.json · derived</text>
+    </g>
+    <text class="note" x="250" y="88" font-size="17" text-anchor="middle">invokes</text>
+    <text class="note" x="250" y="238" font-size="17" text-anchor="middle">invokes</text>
+    <text class="note" x="600" y="106" font-size="17" text-anchor="middle">push</text>
+    <text class="note" x="600" y="266" font-size="17" text-anchor="middle">rebuild</text>
+  </svg>
+  <p class="foot">Both front ends read through the same process boundary, which is why they never disagree about what is on the shelf.</p>
+</section>
+
+<section class="slide" id="slide-4">
+  <p class="kicker">Identity</p>
+  <h1>Ids are derived, not assigned.</h1>
+  <div class="split">
+    <pre class="code">fileId(machine, path) =
+  "sf_" + sha1(machine + "\0|" + path).slice(0, 20)
+
+fileId("mac-mini", "q3.html")
+  → sf_7c2b1e9f0a4d6b8c3a5e</pre>
+    <div class="stack">
+      <h2>What that buys</h2>
+      <p class="muted">A local store that lost its index reconstructs the same ids the server already knows. <span class="mono">shelf read &lt;id&gt;</span> works from any machine.</p>
+      <p class="muted">The server recomputes the id and rejects a mismatch, so a client cannot address another path's row.</p>
+    </div>
+  </div>
+  <p class="foot">sha1 here is a naming hash, never content integrity — that is sha256.</p>
+</section>
+
+<section class="slide" id="slide-5">
+  <p class="kicker">Decisions</p>
+  <h1>Each choice buys one property and costs one thing.</h1>
+  <table>
+    <thead><tr><th scope="col">Decision</th><th scope="col">Buys</th><th scope="col">Costs</th></tr></thead>
+    <tbody>
+      <tr><td>Immutable paths (<span class="mono">-v2</span>, <span class="mono">-v3</span>)</td><td>Every version stays addressable; sync rows never change identity</td><td>The shelf grows; names get suffixes</td></tr>
+      <tr><td>sha256 content addressing</td><td>Re-runs are no-ops; a failed sync only moves what changed</td><td>Hashing on every write</td></tr>
+      <tr><td>Cursor sync on server <span class="mono">edited_at</span></td><td>No client clocks, no lost deltas, plain SQL</td><td>One wall clock lives in the database</td></tr>
+      <tr><td>CLI as the only store implementation</td><td>Terminal and window can never disagree</td><td>~60 ms process spawn per read</td></tr>
+      <tr><td>Single-user allowlist auth</td><td>No sharing, roles, or invitation surface</td><td>Not usable by anyone else as-is</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="slide" id="slide-6">
+  <p class="kicker">Rendering</p>
+  <h1>Artifacts may run code, but never reach the network.</h1>
+  <div class="split wide">
+    <div class="stack">
+      <div class="stat"><b>default-src 'none'</b><span>the whole policy for a local document</span><small>script-src and style-src allow <span class="mono">'unsafe-inline'</span> only</small></div>
+      <p class="muted">Desktop: the reader iframe points at <span class="mono">shelf://localhost/view/&lt;id&gt;</span>. The Rust handler runs <span class="mono">shelf read</span> and returns the bytes with that header.</p>
+      <p class="muted">Phone: the PWA renders the same document from an object URL inside a sandboxed iframe with an opaque origin.</p>
+    </div>
+    <div class="stack">
+      <h2>Works</h2>
+      <p class="muted">Inline scripts, inline styles, data: and blob: images, own <span class="mono">localStorage</span> on desktop.</p>
+      <h2>Blocked</h2>
+      <p class="muted">CDNs, remote fonts, beacons, <span class="mono">fetch</span>, form posts, base URLs, and <span class="mono">new Function</span> — <span class="mono">unsafe-eval</span> is deliberately absent.</p>
+    </div>
+  </div>
+  <p class="foot">A document that needs the network is a document that must inline its dependencies instead.</p>
+</section>
+
+<section class="slide" id="slide-7">
+  <p class="kicker">Hosting</p>
+  <h1>Cheap, programmable, and boring to operate.</h1>
+  <div class="grid">
+    <article class="card"><h2>Cloudflare Worker</h2><p>One deployed unit serves the API, the auth pages and the PWA. Deploy is one command; there is no server to patch.</p></article>
+    <article class="card"><h2>Postgres on Neon</h2><p>One table, one text column for the HTML, capped at 5 MB per document.</p></article>
+    <article class="card"><h2>Hyperdrive in front</h2><p>Production uses <span class="mono">pg</span> over a pooled connection; local dev uses the same driver against a local Postgres, so both paths run identical SQL.</p></article>
+  </div>
+  <div class="tail"><p class="callout">Push-back on the brief: Cloudflare D1 would remove a vendor and a config step. Postgres was kept because the data is worth more than the convenience.</p></div>
+</section>
+
+<section class="slide" id="slide-8">
+  <p class="kicker">Alternatives</p>
+  <h1>What was considered and rejected.</h1>
+  <table>
+    <thead><tr><th scope="col">Rejected</th><th scope="col">Why not</th></tr></thead>
+    <tbody>
+      <tr><td>SQLite for the local map</td><td>Hundreds of small files; a JSON map is milliseconds and keeps the CLI dependency-free. The <span class="mono">store.ts</span> boundary is where it would change.</td></tr>
+      <tr><td>Device-code auth (RFC 8628)</td><td>Works over SSH, but the loopback redirect is one click instead of typing a code — and this is a single-user desktop tool.</td></tr>
+      <tr><td>Object storage for HTML</td><td>Signed URLs, lifecycle rules and a second consistency story, for payloads smaller than a photo.</td></tr>
+      <tr><td>Embedding the store in the Tauri app</td><td>Two implementations of the same rules is how the window and the terminal start disagreeing.</td></tr>
+      <tr><td>A background sync daemon</td><td>Out of scope: sync runs on app open, on chip click, or when the agent calls <span class="mono">shelf sync</span>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="slide" id="slide-9">
+  <p class="kicker">Evidence</p>
+  <h1>What proves it works today.</h1>
+  <div class="grid">
+    <div class="stat"><b>35</b><span>unit tests across ids, paths, flags, index, UI logic</span></div>
+    <div class="stat"><b>30</b><span>end-to-end smoke checks against a local Worker + Postgres</span></div>
+    <div class="stat"><b>2</b><span>Rust tests for deep links and the CLI-backed reader</span></div>
+  </div>
+  <div class="tail">
+    <p class="callout">The smoke run drives the real browser handoff, writes, versions, replaces, and pulls a file written by a second machine into the local store.</p>
+    <p class="foot">CLI bundles to one 53 KB file with no runtime dependencies beyond Node built-ins.</p>
+  </div>
+</section>
+
+<section class="slide center" id="slide-10">
+  <p class="kicker">Limits</p>
+  <h1>Honest gaps, in order of likely annoyance.</h1>
+  <ul class="lede">
+    <li>The desktop bundle is unsigned: first launch needs right-click → Open, or signing with an Apple certificate.</li>
+    <li>No delete or rename — a deliberate consequence of immutable paths, and the first change I would make.</li>
+    <li>Sync is manual, never background.</li>
+    <li>Search is a path <span class="mono">ILIKE</span> locally and server-side; full-text is the upgrade at a few thousand documents.</li>
+  </ul>
+</section>
+
+        </div>
+      </div>
+    </main>
+    <button class="icon-btn exit-present" id="exit-present" type="button" aria-label="Exit full screen" title="Exit full screen (Esc)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <p class="sr-only" id="live" aria-live="polite"></p>
+  <script>
+    const SLIDE_W = 1280;
+    const app = document.querySelector(".app");
+    const presentButton = document.getElementById("present");
+    const exitPresentButton = document.getElementById("exit-present");
+    let browserFullscreen = false;
+    function setPresenting(on) {
+      app.classList.toggle("is-presenting", on);
+      presentButton.setAttribute("aria-pressed", String(on));
+      (on ? exitPresentButton : presentButton).focus({ preventScroll: true });
+    }
+    presentButton.addEventListener("click", async () => {
+      setPresenting(true);
+      // Hiding the rail also works in embedded viewers that disallow native fullscreen.
+      try {
+        await document.documentElement.requestFullscreen?.();
+        browserFullscreen = Boolean(document.fullscreenElement);
+      } catch { /* Keep the in-window presentation mode. */ }
+    });
+    document.addEventListener("fullscreenchange", () => {
+      if (document.fullscreenElement) browserFullscreen = true;
+      else if (browserFullscreen) { browserFullscreen = false; setPresenting(false); }
+    });
+    function leavePresentation() {
+      setPresenting(false);
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }
+    exitPresentButton.addEventListener("click", leavePresentation);
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !app.classList.contains("is-presenting")) return;
+      event.preventDefault();
+      leavePresentation();
+    });
+    const themeButton = document.querySelector(".theme-toggle");
+    const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+    function setTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      const label = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+      themeButton.setAttribute("aria-label", label);
+      themeButton.title = label;
+    }
+    themeButton.addEventListener("click", () => {
+      const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.themePreference = theme;
+      setTheme(theme);
+      try { localStorage.setItem("html-theme", theme); } catch {}
+    });
+    systemTheme.addEventListener("change", (event) => {
+      if (document.documentElement.dataset.themePreference === "system") setTheme(event.matches ? "dark" : "light");
+    });
+    setTheme(document.documentElement.dataset.theme);
+
+    function svgEl(name, attrs) {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", name);
+      for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, String(value));
+      return el;
+    }
+    function fmt(n) {
+      return Number(n.toPrecision(4)).toLocaleString("en-US", { maximumSignificantDigits: 4, ...(Math.abs(n) >= 10000 ? { notation: "compact" } : {}) });
+    }
+    function chartText(svg, x, y, text, cls = "tick", anchor = "start", size = 15) {
+      const el = svgEl("text", { x, y, class: cls, "text-anchor": anchor, "dominant-baseline": "middle", "font-size": size });
+      el.textContent = text;
+      svg.append(el);
+      return el;
+    }
+    function seriesFrom(svg) {
+      const series = [...svg.querySelectorAll("[data-values]")].map((el) => {
+        const parts = el.dataset.values.split(",").map((part) => part.trim());
+        if (parts.some((part) => !part || !Number.isFinite(Number(part)))) throw Error("Use finite numbers; no empty or missing values.");
+        return { name: el.dataset.name || "", values: parts.map(Number), labels: el.dataset.labels?.split(",").map((part) => part.trim()) || [] };
+      });
+      if (!series.length || series.length > 3) throw Error("Use one to three series.");
+      const count = series[0].values.length;
+      if (series.some((item) => item.values.length !== count)) throw Error("Series must have equal lengths.");
+      if (series.some((item) => item.labels.length && (item.labels.length !== count || item.labels.some((s) => !s)))) throw Error("Use one non-empty label per value.");
+      if (series.length > 1 && series.some((item) => !item.name)) throw Error("Name each series.");
+      return series;
+    }
+    function chartDomain(svg, series) {
+      const values = series.flatMap((item) => item.values);
+      const lo = Math.min(0, ...values), hi = Math.max(0, ...values);
+      const span = hi - lo || 1;
+      const power = 10 ** Math.floor(Math.log10(span / 4));
+      const raw = span / 4 / power;
+      const step = (raw <= 1 ? 1 : raw <= 2 ? 2 : raw <= 2.5 ? 2.5 : raw <= 5 ? 5 : 10) * power;
+      const hasMin = svg.hasAttribute("data-min"), hasMax = svg.hasAttribute("data-max");
+      const min = hasMin ? Number(svg.dataset.min) : Math.floor(lo / step) * step;
+      const max = hasMax ? Number(svg.dataset.max) : (hi === lo ? min + 1 : Math.ceil(hi / step) * step);
+      if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) throw Error("Axis bounds must be finite and increasing.");
+      if (Math.min(...values) < min || Math.max(...values) > max) throw Error("Axis bounds must include every value.");
+      if (svg.dataset.chart !== "line" && (min > 0 || max < 0)) throw Error("Bar axes must include zero.");
+      const exactSpan = max - min;
+      const tickPower = 10 ** Math.floor(Math.log10(exactSpan / 4));
+      const tickRaw = exactSpan / 4 / tickPower;
+      const tickStep = (tickRaw <= 1 ? 1 : tickRaw <= 2 ? 2 : tickRaw <= 2.5 ? 2.5 : tickRaw <= 5 ? 5 : 10) * tickPower;
+      const ticks = [min];
+      for (let n = Math.floor(min / tickStep) + 1; n * tickStep < max - exactSpan * 1e-9; n++) {
+        const v = Number((n * tickStep).toPrecision(12));
+        if (v - min > exactSpan * .07 && max - v > exactSpan * .07) ticks.push(v);
+      }
+      ticks.push(max);
+      return { min, max, ticks };
+    }
+    function chartGrid(svg, domain, plot, suffix) {
+      const scale = (v) => plot.b - (v - domain.min) / (domain.max - domain.min) * (plot.b - plot.t);
+      domain.ticks.forEach((v) => {
+        const y = scale(v);
+        svg.append(svgEl("line", { x1: plot.l, x2: plot.r, y1: y, y2: y, class: v === 0 ? "grid zero" : "grid" }));
+        chartText(svg, plot.l - 12, y, fmt(v) + suffix, "tick", "end", 13);
+      });
+      if (domain.min < 0 && domain.max > 0 && !domain.ticks.includes(0)) {
+        svg.append(svgEl("line", { x1: plot.l, x2: plot.r, y1: scale(0), y2: scale(0), class: "zero" }));
+      }
+      return scale;
+    }
+    function drawLines(svg, series, domain, suffix) {
+      const labels = series.find((item) => item.labels.length)?.labels || [];
+      const count = series[0].values.length;
+      const plot = { l: 66, r: 548, t: 26, b: 290 };
+      const scale = chartGrid(svg, domain, plot, suffix);
+      const xAt = (i) => count === 1 ? (plot.l + plot.r) / 2 : plot.l + (plot.r - plot.l) * i / (count - 1);
+      const ends = [];
+      series.forEach((item, i) => {
+        const cls = ["series-main", "series-alt", "series-third"][i];
+        svg.append(svgEl("polyline", { points: item.values.map((v, j) => `${xAt(j)},${scale(v)}`).join(" "), class: cls }));
+        item.values.forEach((v, j) => svg.append(svgEl("circle", { cx: xAt(j), cy: scale(v), r: 3.2, class: `point-${i}` })));
+        ends.push({ item, i, y: scale(item.values[count - 1]), labelY: scale(item.values[count - 1]) });
+      });
+      // Separate direct labels without moving the actual data points.
+      ends.sort((a, b) => a.y - b.y);
+      ends.forEach((end, i) => { end.labelY = Math.max(plot.t + 8, end.y, i ? ends[i - 1].labelY + 44 : -Infinity); });
+      const overflow = Math.max(0, ends[ends.length - 1].labelY - (plot.b - 8));
+      ends.forEach(({ item, i, y, labelY }) => {
+        const target = labelY - overflow;
+        svg.append(svgEl("path", { d: `M${xAt(count - 1) + 6} ${y} L568 ${target}`, class: "leader" }));
+        chartText(svg, 578, target - (item.name ? 9 : 0), fmt(item.values[count - 1]) + suffix, "value", "start", 17);
+        if (item.name) chartText(svg, 578, target + 11, item.name, "tick", "start", 13);
+      });
+      const step = count > 7 ? Math.ceil((count - 1) / 6) : 1;
+      for (let i = 0; i < count; i++) {
+        if (i % step && i !== count - 1) continue;
+        chartText(svg, xAt(i), 316, labels[i] || String(i + 1), "tick", "middle", 13);
+      }
+    }
+    function drawBars(svg, series, domain, suffix) {
+      const groups = series[0].values.length;
+      const labels = series.find((item) => item.labels.length)?.labels || [];
+      const legend = series.length > 1;
+      const plot = { l: 66, r: 700, t: legend ? 62 : 32, b: 282 };
+      if (legend) series.forEach((item, i) => {
+        const x = 66 + i * 210;
+        svg.append(svgEl("rect", { x, y: 8, width: 13, height: 13, class: `bar-${i}` }));
+        chartText(svg, x + 20, 15, item.name, "tick", "start", 14);
+      });
+      const scale = chartGrid(svg, domain, plot, suffix);
+      const groupW = (plot.r - plot.l) / groups, inner = groupW * .64, barW = inner / series.length;
+      series.forEach((item, i) => item.values.forEach((v, j) => {
+        const x = plot.l + j * groupW + (groupW - inner) / 2 + i * barW;
+        const y = scale(v), base = scale(0), width = Math.max(barW - 4, 1);
+        svg.append(svgEl("rect", { x, y: Math.min(y, base), width, height: Math.abs(base - y), class: `bar-${i}` }));
+        chartText(svg, x + width / 2, y + (v < 0 ? 14 : -13), fmt(v) + suffix, "value", "middle", 13);
+      }));
+      for (let i = 0; i < groups; i++) chartText(svg, plot.l + (i + .5) * groupW, 322, labels[i] || String(i + 1), "tick", "middle", 13);
+    }
+    function drawHorizontal(svg, series, domain, suffix) {
+      if (series.length !== 1) throw Error("Horizontal bars use one series.");
+      const item = series[0], rows = item.values.length;
+      const plot = { l: 188, r: 644, t: 32, b: 282 };
+      const scale = (v) => plot.l + (v - domain.min) / (domain.max - domain.min) * (plot.r - plot.l);
+      domain.ticks.forEach((v) => {
+        const x = scale(v);
+        svg.append(svgEl("line", { x1: x, x2: x, y1: 16, y2: 294, class: v === 0 ? "grid zero" : "grid" }));
+        chartText(svg, x, 318, fmt(v) + suffix, "tick", "middle", 13);
+      });
+      if (domain.min < 0 && domain.max > 0 && !domain.ticks.includes(0)) svg.append(svgEl("line", { x1: scale(0), x2: scale(0), y1: 16, y2: 294, class: "zero" }));
+      const rowH = (plot.b - plot.t) / rows;
+      item.values.forEach((v, i) => {
+        const y = plot.t + (i + .5) * rowH, base = scale(0), x = scale(v);
+        chartText(svg, plot.l - 14, y, item.labels[i] || String(i + 1), "tick", "end", 15);
+        svg.append(svgEl("rect", { x: Math.min(x, base), y: y - rowH * .23, width: Math.abs(x - base), height: rowH * .46, class: "bar-0" }));
+        // A shared value column keeps signed bars clear of category labels.
+        chartText(svg, domain.min < 0 ? plot.r + 14 : x + 9, y, fmt(v) + suffix, "value", "start", 15);
+      });
+    }
+    function renderCharts(root) {
+      root.querySelectorAll("svg.chart[data-chart]").forEach((svg) => {
+        if (svg.dataset.ready === "1") return;
+        svg.setAttribute("viewBox", "0 0 720 340");
+        svg.setAttribute("role", "img");
+        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+        try {
+          const series = seriesFrom(svg), domain = chartDomain(svg, series);
+          const draw = { line: drawLines, bars: drawBars, hbars: drawHorizontal }[svg.dataset.chart];
+          if (!draw) throw Error("Unknown chart type.");
+          svg.replaceChildren();
+          draw(svg, series, domain, svg.dataset.suffix || "");
+          svg.dataset.ready = "1";
+        } catch (error) {
+          svg.replaceChildren();
+          svg.dataset.error = error.message;
+          svg.setAttribute("aria-label", `Chart error: ${error.message}`);
+          chartText(svg, 24, 90, "Chart needs attention", "value", "start", 22);
+          chartText(svg, 24, 124, error.message, "tick", "start", 16);
+          console.error("Chart:", error.message);
+        }
+      });
+    }
+    function prefixIds(clone, index) {
+      const map = new Map();
+      clone.querySelectorAll("[id]").forEach((el) => {
+        const next = `t${index}-${el.id}`;
+        map.set(el.id, next);
+        el.id = next;
+      });
+      if (!map.size) return;
+      clone.querySelectorAll("*").forEach((el) => {
+        for (const attr of [...el.attributes]) {
+          let value = attr.value.replace(/url\(["']?#([^\s)"']+)["']?\)/g, (match, id) => (
+            map.has(id) ? `url(#${map.get(id)})` : match
+          ));
+          if (["href", "xlink:href"].includes(attr.name) && value.startsWith("#")) {
+            value = map.has(value.slice(1)) ? `#${map.get(value.slice(1))}` : value;
+          }
+          if (["aria-labelledby", "aria-describedby", "for"].includes(attr.name)) {
+            value = value.split(/\s+/).map((id) => map.get(id) || id).join(" ");
+          }
+          if (value !== attr.value) el.setAttribute(attr.name, value);
+        }
+      });
+    }
+    function slideTitle(slide, index) {
+      const heading = slide.querySelector("h1, h2, blockquote")?.cloneNode(true);
+      heading?.querySelectorAll("br").forEach((br) => br.replaceWith(" "));
+      return heading?.textContent.replace(/\s+/g, " ").trim() || `Slide ${index + 1}`;
+    }
+    function fitThumbs() {
+      document.querySelectorAll(".thumb-frame").forEach((frame) => {
+        const scale = frame.clientWidth / SLIDE_W;
+        if (scale > 0) frame.firstElementChild.style.transform = `scale(${scale})`;
+      });
+    }
+
+    const slides = [...document.querySelectorAll("#slides > .slide")];
+    for (const slide of slides) {
+      const canvas = document.createElement("div");
+      canvas.className = "canvas";
+      while (slide.firstChild) canvas.append(slide.firstChild);
+      slide.append(canvas);
+    }
+    renderCharts(document.getElementById("slides"));
+    const thumbList = document.getElementById("thumbs");
+    const thumbs = slides.map((slide, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "thumb";
+      button.setAttribute("aria-label", `Slide ${index + 1}: ${slideTitle(slide, index)}`);
+      const num = document.createElement("span");
+      num.className = "num";
+      num.textContent = String(index + 1);
+      num.setAttribute("aria-hidden", "true");
+      const frame = document.createElement("span");
+      frame.className = "thumb-frame";
+      const scale = document.createElement("span");
+      scale.className = "thumb-scale";
+      const clone = slide.cloneNode(true);
+      clone.removeAttribute("id");
+      clone.classList.remove("is-active");
+      clone.querySelectorAll("script").forEach((script) => script.remove());
+      prefixIds(clone, index);
+      clone.setAttribute("inert", "");
+      clone.setAttribute("aria-hidden", "true");
+      scale.append(clone);
+      frame.append(scale);
+      button.append(num, frame);
+      button.addEventListener("click", () => go(index));
+      thumbList.append(button);
+      return button;
+    });
+
+    const count = document.getElementById("count");
+    const live = document.getElementById("live");
+    const prev = document.getElementById("prev");
+    const next = document.getElementById("next");
+    let index = 0;
+
+    function reveal(button, behavior) {
+      const scroller = thumbList;
+      const buttonBox = button.getBoundingClientRect();
+      const scrollerBox = scroller.getBoundingClientRect();
+      const nextScroll = { behavior };
+      if (buttonBox.top < scrollerBox.top - 1 || buttonBox.bottom > scrollerBox.bottom + 1) {
+        nextScroll.top = scroller.scrollTop + buttonBox.top - scrollerBox.top - 8;
+      }
+      if (buttonBox.left < scrollerBox.left - 1 || buttonBox.right > scrollerBox.right + 1) {
+        nextScroll.left = scroller.scrollLeft + buttonBox.left - scrollerBox.left - 8;
+      }
+      if ("top" in nextScroll || "left" in nextScroll) scroller.scrollTo(nextScroll);
+    }
+    function go(nextIndex, behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth") {
+      if (!slides.length) return;
+      const thumbHadFocus = thumbs.includes(document.activeElement);
+      index = Math.max(0, Math.min(slides.length - 1, nextIndex));
+      slides.forEach((slide, n) => slide.classList.toggle("is-active", n === index));
+      thumbs.forEach((button, n) => {
+        if (n === index) button.setAttribute("aria-current", "true");
+        else button.removeAttribute("aria-current");
+      });
+      count.textContent = `${index + 1} / ${slides.length}`;
+      prev.disabled = index === 0;
+      next.disabled = index === slides.length - 1;
+      const id = slides[index].id;
+      if (id && location.hash !== `#${id}`) history.replaceState(null, "", `#${id}`);
+      live.textContent = `Slide ${index + 1} of ${slides.length}. ${slideTitle(slides[index], index)}`;
+      if (thumbHadFocus) thumbs[index].focus({ preventScroll: true });
+      reveal(thumbs[index], behavior);
+    }
+
+    prev.addEventListener("click", () => go(index - 1));
+    next.addEventListener("click", () => go(index + 1));
+    window.addEventListener("hashchange", () => {
+      const found = slides.findIndex((slide) => slide.id === location.hash.slice(1));
+      if (found >= 0 && found !== index) go(found, "auto");
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const tag = document.activeElement?.tagName;
+      if (["INPUT", "TEXTAREA", "SELECT", "AUDIO", "VIDEO", "SUMMARY"].includes(tag) || document.activeElement?.isContentEditable || document.activeElement?.closest('[role="slider"], [role="spinbutton"], [role="listbox"]')) return;
+      const selection = document.getSelection();
+      if (selection && !selection.isCollapsed) return;
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const motion = reduced ? "auto" : "smooth";
+      if (event.key === "ArrowDown" || event.key === "ArrowRight" || event.key === "PageDown") {
+        event.preventDefault();
+        go(index + 1, motion);
+      } else if (event.key === "ArrowUp" || event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        go(index - 1, motion);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        go(0, motion);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        go(slides.length - 1, motion);
+      }
+    });
+
+    const hashed = slides.findIndex((slide) => slide.id && slide.id === location.hash.slice(1));
+    fitThumbs();
+    go(hashed >= 0 ? hashed : 0, "auto");
+    const watch = new ResizeObserver(() => fitThumbs());
+    watch.observe(thumbList);
+    window.addEventListener("resize", fitThumbs);
+  </script>
+</body>
+</html>

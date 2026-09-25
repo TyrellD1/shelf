@@ -149,7 +149,20 @@ reads as a label, not decoration. Filter chips reuse the same swatch.
 - Manual: the UI was exercised in a real browser against the dev Worker (login, list, facets,
   reader, ⌘P palette).
 
-## 4. Known limits / next
+## 4. Found by dogfooding
+
+- **Better Auth's API-key plugin rate-limits to 10 requests per day per key by default**, which
+  is nothing for a client that pushes every file it writes: the CLI started returning 401 part-way
+  through a normal day. `rateLimit: { enabled: false }` in `web/src/auth.ts` is the fix; for a
+  single-user tool with one long-lived key per machine, the allowlist is the real guard. Worth
+  knowing because the failure looks like a revoked token, not a quota.
+- The first real write of a second machine's file proved the local store layout: bytes land in
+  `~/.shelf/html/<machine-id>/<path>` and appear in the list without touching the server, which
+  is what makes the desktop reader work offline.
+- Deleting `index.json` and re-running `shelf list` rebuilds identical metadata from the store
+  (verified during cleanup) — the derived-map claim holds.
+
+## 5. Known limits / next
 
 - The desktop bundle is unsigned: first launch needs right-click → Open, or `xattr -dr
   com.apple.quarantine`. Signing needs an Apple Developer certificate.
