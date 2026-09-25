@@ -1,0 +1,21 @@
+# Optional Postgres for local development, for anyone who prefers Docker over a
+# local Postgres install. `scripts/dev-db.sh` is the no-Docker path.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shelf
+      POSTGRES_PASSWORD: shelf
+      POSTGRES_DB: shelf
+    ports:
+      - "55432:5432"
+    volumes:
+      - shelf-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shelf"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  shelf-pgdata:

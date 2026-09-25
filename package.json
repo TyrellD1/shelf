@@ -1,0 +1,34 @@
+{
+  "name": "shelf",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local-first shelf for agent-generated HTML: CLI, desktop app, and PWA.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "shared",
+    "cli",
+    "ui",
+    "web",
+    "desktop"
+  ],
+  "scripts": {
+    "build": "npm run build -w ui && npm run build -w cli",
+    "test": "npm run test -w shared && npm run test -w cli && npm run test -w ui && npm run test -w web",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w cli && npm run typecheck -w ui && npm run typecheck -w web",
+    "db:up": "bash scripts/dev-db.sh start",
+    "db:down": "bash scripts/dev-db.sh stop",
+    "db:status": "bash scripts/dev-db.sh status",
+    "db:migrate": "npm run migrate -w web",
+    "db:seed": "npm run seed -w web",
+    "dev": "npm run dev -w web",
+    "dev:all": "bash scripts/dev-all.sh",
+    "desktop": "npm run dev -w desktop",
+    "desktop:build": "npm run build -w desktop",
+    "install:cli": "bash scripts/dev-link-cli.sh",
+    "smoke": "bash scripts/smoke.sh",
+    "icons": "node scripts/make-icons.mjs"
+  }
+}

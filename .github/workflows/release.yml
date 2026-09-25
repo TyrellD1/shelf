@@ -1,0 +1,32 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -w shared && npm test -w cli
+      - name: Build the CLI bundle
+        run: npm run build -w cli
+      - name: Checksums
+        working-directory: cli/dist
+        run: shasum -a 256 shelf.cjs > SHA256SUMS && cat SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cli/dist/shelf.cjs
+            cli/dist/SHA256SUMS
+          generate_release_notes: true
