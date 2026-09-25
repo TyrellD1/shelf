@@ -1,4 +1,12 @@
 :root {
+  /* Top bar height. The desktop window uses an overlay title bar, so this also
+     sets how much room the system traffic lights have and how much of the bar
+     you can grab to move the window.
+
+     The traffic lights are a macOS decoration we can only nudge, so the bar is
+     kept at 44px to line up with them: see desktop/src-tauri/tauri.conf.json
+     (`trafficLightPosition.y`) and scripts/measure-topbar.mjs to re-check. */
+  --topbar: 44px;
   --page: #fafafa;
   --ink: #111111;
   --muted: #6b6b6b;
@@ -101,7 +109,7 @@ code,
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 44px;
+  height: var(--topbar);
   padding: 0 12px;
   border-bottom: 1px solid var(--line);
   background: var(--page);
@@ -109,7 +117,7 @@ code,
 }
 
 /* The desktop window uses an overlay title bar: the system traffic lights sit in
-   this bar, so it is taller, indented, and acts as the drag region. */
+   this bar, so it is indented, and it acts as the drag region. */
 html.tauri .topbar {
   padding-left: 84px;
   -webkit-app-region: drag;
@@ -200,12 +208,20 @@ button.chip:hover {
   place-items: center;
   width: 24px;
   height: 24px;
+  /* The UA stylesheet gives <button> `padding: 1px 6px`, which pushes the icon
+     off centre. Reset it so the icon centres in the 24px box. */
+  padding: 0;
+  line-height: 1;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
   color: var(--muted);
   cursor: pointer;
   flex: 0 0 auto;
+}
+
+.icon-button svg {
+  display: block;
 }
 
 .icon-button:hover {
