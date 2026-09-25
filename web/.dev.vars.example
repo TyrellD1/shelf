@@ -1,0 +1,19 @@
+# Local development secrets for `wrangler dev`. Copy to `.dev.vars` and fill in.
+#   cp .dev.vars.example .dev.vars
+#
+# DATABASE_URL comes from `scripts/dev-db.sh start` (or any Postgres).
+DATABASE_URL=postgres://shelf@127.0.0.1:55432/shelf
+
+# Sign Better Auth sessions and API keys. Generate: openssl rand -base64 32
+BETTER_AUTH_SECRET=replace-me-with-32-random-bytes
+
+# Public origin of the web app (must match how you open it).
+APP_URL=http://localhost:8787
+
+# Comma separated allowlist. Anyone else is rejected before a session is created.
+ALLOWED_EMAILS=you@example.com
+
+# Used by `npm run db:seed` to create the single account.
+SEED_EMAIL=you@example.com
+SEED_PASSWORD=change-me-please
+SEED_NAME=Your Name
