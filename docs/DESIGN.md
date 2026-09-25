@@ -161,6 +161,11 @@ reads as a label, not decoration. Filter chips reuse the same swatch.
   is what makes the desktop reader work offline.
 - Deleting `index.json` and re-running `shelf list` rebuilds identical metadata from the store
   (verified during cleanup) — the derived-map claim holds.
+- **A rebuilt index cannot know what was pushed**, and the first version of the write path treated
+  `pushedSha === null` as "different content", so an identical `shelf write` after a rebuild stacked
+  `report-v2.html` (and would have kept going). Fixed in `cli/src/lib/writer.ts`: identical bytes at
+  the requested path now mean *unchanged*, and the push runs anyway to reconcile the remote copy.
+  `scripts/smoke.sh` has a dedicated "a lost index is recoverable" step so it cannot regress.
 
 ## 5. Known limits / next
 
