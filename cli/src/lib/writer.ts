@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   MAX_HTML_BYTES,
   fileId,
@@ -267,15 +267,40 @@ function entryFromMeta(meta: ShelfFileMeta): Entry {
   };
 }
 
-/** Where the file lives on the shelf. Relative by default, `~/…` outside the cwd. */
+/**
+ * Where the file lives on the shelf.
+ *
+ * Paths are relative to the git root when the file is inside a repository, so
+ * the same document written from anywhere in a project lands on one shelf path.
+ * Outside a repository: relative to the current directory, then to `$HOME`.
+ */
 export function shelfPathFor(inputPath: string, cwd: string = process.cwd()): string {
-  if (!isAbsolute(inputPath)) return normalizePath(inputPath);
   const absolute = resolve(cwd, inputPath);
-  const fromCwd = relative(cwd, absolute);
-  if (fromCwd && !fromCwd.startsWith("..")) return normalizePath(fromCwd);
+  const root = findGitRoot(absolute) ?? cwd;
+
+  const fromRoot = relative(root, absolute);
+  if (fromRoot && !fromRoot.startsWith("..") && !isAbsolute(fromRoot)) {
+    return normalizePath(fromRoot);
+  }
+
   const fromHome = relative(homedir(), absolute);
-  if (fromHome && !fromHome.startsWith("..")) return normalizePath(`~/${fromHome}`);
+  if (fromHome && !fromHome.startsWith("..") && !isAbsolute(fromHome)) {
+    return normalizePath(`~/${fromHome}`);
+  }
+
   return normalizePath(absolute.replace(/^\/+/, ""));
+}
+
+/** Walks up looking for a `.git` entry (a directory or a worktree file). */
+function findGitRoot(from: string): string | null {
+  let directory = existsSync(from) && statSync(from).isDirectory() ? from : dirname(from);
+  for (let depth = 0; depth < 40; depth++) {
+    if (existsSync(join(directory, ".git"))) return directory;
+    const parent = dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
+  }
+  return null;
 }
 
 export function relativeTime(iso: string, now: number = Date.now()): string {

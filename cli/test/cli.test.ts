@@ -36,6 +36,19 @@ describe("shelfPathFor", () => {
   it("compresses other absolute paths", () => {
     expect(shelfPathFor("/tmp/shelf/report.html", cwd)).toBe("tmp/shelf/report.html");
   });
+
+  it("anchors to the git root so one file has one shelf path", () => {
+    const repo = mkdtempSync(join(tmpdir(), "shelf-repo-"));
+    mkdirSync(join(repo, ".git"));
+    const sub = join(repo, "docs", "deep");
+    mkdirSync(sub, { recursive: true });
+    writeFileSync(join(repo, "docs", "report.html"), "<p>x</p>");
+
+    // From the repo root, from a subdirectory, and by absolute path.
+    expect(shelfPathFor("docs/report.html", repo)).toBe("docs/report.html");
+    expect(shelfPathFor("../report.html", sub)).toBe("docs/report.html");
+    expect(shelfPathFor(join(repo, "docs", "report.html"), sub)).toBe("docs/report.html");
+  });
 });
 
 describe("index helpers", () => {
