@@ -109,23 +109,27 @@ export async function writeToShelf(request: WriteRequest): Promise<WriteOutcome>
       return unchanged(previous);
     }
 
-    // Re-running the same write must not stack versions: if any member of this
-    // path's version family already holds exactly these bytes, that is a no-op.
-    // (`--replace` and `--as-new` are explicit instructions, so they skip this.)
-    if (!request.replace && !request.asNew) {
-      const twin = Object.values(index.entries).find(
-        (candidate) =>
-          candidate.machineId === machineId &&
-          candidate.sha256 === digest &&
-          candidate.pushedSha === digest &&
-          familyKey(candidate.pathOnMachine) === familyKey(path),
-      );
-      if (twin) return unchanged(twin);
-    }
-
-    if (request.replace) {
+    if (sameContent) {
+      // The bytes are already on the shelf at this path; only the push may be
+      // missing (an index rebuild cannot know what was pushed). Rewrite the same
+      // bytes and let the push below reconcile — never a new version.
+      action = "unchanged";
+    } else if (request.replace) {
       action = "replaced";
     } else {
+      // Re-running the same write must not stack versions: if any member of this
+      // path's version family already holds exactly these bytes, that is a no-op.
+      if (!request.asNew) {
+        const twin = Object.values(index.entries).find(
+          (candidate) =>
+            candidate.machineId === machineId &&
+            candidate.sha256 === digest &&
+            candidate.pushedSha === digest &&
+            familyKey(candidate.pathOnMachine) === familyKey(path),
+        );
+        if (twin) return unchanged(twin);
+      }
+
       action = "versioned";
       const resolved = await firstFreePath(index, machineId, path, api);
       if (request.asNew) {
@@ -143,7 +147,7 @@ export async function writeToShelf(request: WriteRequest): Promise<WriteOutcome>
     }
   }
 
-  const keepingPlace = action === "replaced" && previous !== undefined;
+  const keepingPlace = (action === "replaced" || action === "unchanged") && previous !== undefined;
   const record: Entry = {
     id: fileId(machineId, path),
     machineId,
