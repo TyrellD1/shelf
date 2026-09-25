@@ -152,11 +152,14 @@ own documented mechanism.
 
 ### The reader lives in the top bar
 The app uses an overlay title bar (`hiddenTitle` + `titleBarStyle: "Overlay"` + `trafficLightPosition`),
-so the macOS traffic lights sit inside the app's own 44 px bar. The bar is the drag region and
-interactive children opt out with `-webkit-app-region: no-drag`; `html.tauri` adds the 84 px left
-indent that keeps controls clear of the lights (the PWA gets the same bar without the indent).
-Floating controls over a document break the one thing the reader is for, so the back button, the
-title and "open in a browser tab" sit in that bar while the iframe owns everything below it.
+so the macOS traffic lights sit inside the app's own 44 px bar. Two numbers had to be measured rather
+than guessed: the lights' centre lands at `trafficLightPosition.y - 2.25` CSS px (so `y: 24` puts them
+on a 44 px bar's centre line, confirmed with `scripts/measure-topbar.mjs`), and `<button>` carries a
+UA `padding: 1px 6px` that pushes a supposedly centred icon off by 2.5 px until it is reset. The bar
+is the drag region and interactive children opt out with `-webkit-app-region: no-drag`; `html.tauri`
+adds the 84 px left indent that keeps controls clear of the lights (the PWA gets the same bar without
+the indent). Floating controls over a document break the one thing the reader is for, so the back
+button, the title and "open in a browser tab" sit in that bar while the iframe owns everything below it.
 
 ### Paths are anchored to the git root
 `path_on_machine` is the file's path relative to the repository root when it lives in a repository

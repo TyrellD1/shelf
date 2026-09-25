@@ -42,6 +42,15 @@ desktop/src-tauri/  main.rs (commands, shelf:// protocol, deep links)
 
 - `npm run typecheck && npm test` before committing; `npm run smoke` for end-to-end changes
   (it drives the real CLI against a local Worker and Postgres).
+- Tuning the desktop top bar (the traffic lights are a macOS decoration we only nudge):
+  `--topbar` and `html.tauri .topbar { padding-left }` in `ui/src/style.css`, and
+  `trafficLightPosition` in `desktop/src-tauri/tauri.conf.json`. Both need `npm run desktop:build`.
+  To check it without eyesight: `screencapture -l <window-id> -o -x shot.png` (find the id with a
+  CoreGraphics listing; `-o` drops the window shadow, which otherwise shifts every measurement),
+  then `node scripts/measure-topbar.mjs shot.png --scale 2` for the dot band, and `--ink --region`
+  for a control's band. The lights' centre lands at `trafficLightPosition.y - 2.25` CSS px, so on a
+  44 px bar `y: 24` puts them on the centre line. A locked screen makes `screencapture -l` return a
+  blank frame, so unlock before trusting a capture.
 - Schema changes go in `web/migrations/*.sql` with `if not exists` / `add column if not exists`
   so `npm run db:migrate` stays idempotent. Better Auth's own tables are created by that script.
 - The CLI ships as one bundled file (`cli/build.mjs`) with no runtime dependencies beyond Node
