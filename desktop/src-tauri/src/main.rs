@@ -253,13 +253,16 @@ fn size_window(app: &AppHandle) {
     let width = (work.size.width as f64 / scale - MARGIN).min(PREFERRED_WIDTH);
     let height = (work.size.height as f64 / scale - MARGIN).min(PREFERRED_HEIGHT);
 
+    let before = window.inner_size().map(|s| (s.width, s.height));
     let _ = window.set_size(tauri::LogicalSize::new(width, height));
     let _ = window.center();
     eprintln!(
-        "shelf: window theme {:?}, scale {scale}, work area {}x{}",
+        "shelf: theme {:?}, scale {scale}, work {}x{} physical, target {width}x{height} logical, inner before {before:?}, inner after {:?}, outer {:?}",
         window.theme(),
         work.size.width,
-        work.size.height
+        work.size.height,
+        window.inner_size().map(|s| (s.width, s.height)),
+        window.outer_size().map(|s| (s.width, s.height)),
     );
 }
 
