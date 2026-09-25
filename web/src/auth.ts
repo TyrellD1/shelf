@@ -33,6 +33,10 @@ export function createAuth(env: AuthEnv, db: Kysely<Database>) {
         // `metadata` records which CLI install (clientId) owns a key so a
         // repeat `shelf setup` can rotate it instead of piling up keys.
         enableMetadata: true,
+        // The plugin defaults to 10 requests per day per key, which is nothing
+        // for a client that pushes every file it writes. This is a single-user
+        // tool with one long-lived key per machine; the allowlist is the guard.
+        rateLimit: { enabled: false },
       }),
     ],
     hooks: {
