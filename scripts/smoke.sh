@@ -20,6 +20,9 @@ fi
 
 TMP="$(mktemp -d)"
 COOKIES="$TMP/cookies.txt"
+# Unique per run so repeated runs stay independent on a shared database.
+MACHINE_A="smoke-a-$$"
+MACHINE_B="smoke-b-$$"
 PASS=0
 FAIL=0
 
@@ -36,11 +39,41 @@ expect_match() {
   shift 2
   local out
   out="$("$@" 2>&1)" || true
-  if printf '%s' "$out" | grep -q "$needle"; then ok "$desc"; else bad "$desc"; fi
+  if printf '%s' "$out" | grep -q "$needle"; then
+    ok "$desc"
+  else
+    bad "$desc"
+    printf '      expected /%s/, got: %s\n' "$needle" "$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-700)"
+  fi
 }
 
 expect_file() {
   if [ -f "$1" ]; then ok "$2"; else bad "$2"; fi
+}
+
+# Asserts on parsed JSON output: check_json "<desc>" '<python expr over d>' cmd...
+check_json() {
+  local desc="$1" expr="$2"
+  shift 2
+  local out
+  out="$("$@" 2>/dev/null)" || true
+  if printf '%s' "$out" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if ($expr) else 1)" 2>/dev/null; then
+    ok "$desc"
+  else
+    bad "$desc"
+    printf '      got: %s\n' "$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)"
+  fi
+}
+
+# For one command whose output must satisfy several assertions.
+check_output() {
+  local desc="$1" needle="$2" out="$3"
+  if printf '%s' "$out" | grep -q "$needle"; then
+    ok "$desc"
+  else
+    bad "$desc"
+    printf '      expected /%s/, got: %s\n' "$needle" "$(printf '%s' "$out" | tr '\n' ' ' | cut -c1-300)"
+  fi
 }
 
 # Drives the browser half of `shelf setup` over HTTP with the session cookie.
@@ -88,10 +121,10 @@ expect_match "session cookie works" '"fileCount"' curl -sf -b "$COOKIES" "$API_U
 step "setup: browser handoff"
 A="$TMP/home-a"
 B="$TMP/home-b"
-setup_home "$A" smoke-machine-a
-setup_home "$B" smoke-machine-b
+setup_home "$A" "$MACHINE_A"
+setup_home "$B" "$MACHINE_B"
 expect_file "$A/config.json" "config.json written"
-expect_match "machine id stored" '"machineId": "smoke-machine-a"' cat "$A/config.json"
+expect_match "machine id stored" "\"machineId\": \"$MACHINE_A\"" cat "$A/config.json"
 
 step "write / list / read"
 printf '<!doctype html><title>Smoke</title><h1>hello shelf</h1>' > "$TMP/report.html"
@@ -116,13 +149,13 @@ esac
 step "sync between machines"
 printf '<!doctype html><title>From B</title><p>written on b</p>' > "$TMP/from-b.html"
 expect_match "machine B pushes" '"pushed": true' shelf "$B" write "$TMP/from-b.html" --json
-expect_match "machine A pulls it" '"pulled": 1' shelf "$A" sync --json
+check_json "machine A pulls what B wrote" 'd["pulled"] >= 1 and d["ok"] is True' shelf "$A" sync --json
 B_PATH="$(shelf "$A" list --json --search=from-b.html | sed -n 's/.*"path": "\([^"]*\)".*/\1/p' | head -1)"
 expect_match "A can read B's file by path" 'written on b' shelf "$A" read "$B_PATH"
 B_ID="$(shelf "$A" list --json --search=from-b.html | sed -n 's/.*"id": "\([^"]*\)".*/\1/p' | head -1)"
 expect_match "A can read B's file by id" 'written on b' shelf "$A" read "$B_ID"
-expect_match "A's list shows both machines" 'smoke-machine-b' shelf "$A" list --json
-if find "$A/html/smoke-machine-b" -name 'from-b.html' | grep -q .; then
+expect_match "A's list shows both machines" "$MACHINE_B" shelf "$A" list --json
+if find "$A/html/$MACHINE_B" -name 'from-b.html' | grep -q .; then
   ok "B's bytes landed in A's local store"
 else
   bad "B's bytes landed in A's local store"
@@ -142,13 +175,27 @@ expect_match "unauthorized without a key or cookie" '"error":"unauthorized"' \
 
 step "status"
 expect_match "status reports configured" '"configured": true' shelf "$A" status --json
-expect_match "status knows both machines" 'smoke-machine-b' shelf "$A" status --json
+expect_match "status knows both machines" "$MACHINE_B" shelf "$A" status --json
+
+step "a lost index is recoverable"
+printf '<!doctype html><title>Rebuild</title><p>rebuild check</p>' > "$TMP/rebuild.html"
+UNIQUE="$(basename "$TMP")/rebuild.html"
+expect_match "fresh file writes" '"action": "created"' shelf "$A" write "$TMP/rebuild.html" --json
+mv "$A/index.json" "$A/index.json.lost"
+expect_match "list rebuilds metadata from the store" "$UNIQUE" shelf "$A" list --json --search="$UNIQUE"
+REBUILT="$(shelf "$A" write "$TMP/rebuild.html" --json 2>&1 || true)"
+check_output "identical bytes stay a no-op after a rebuild" '"action": "unchanged"' "$REBUILT"
+check_output "the no-op repushes what the rebuild could not know" '"pushed": true' "$REBUILT"
+expect_match "no second copy of that path was written" '"total": 1' \
+  shelf "$A" list --json --search="$UNIQUE"
+expect_match "sync finishes after a rebuild" '"ok": true' shelf "$A" sync --json --push-only
+expect_match "a second sync has nothing left to push" '"pushed": 0' shelf "$A" sync --json --push-only
 
 step "result"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
 cat <<'NOTE'
 
-note: this run left smoke-machine-a / smoke-machine-b rows in the dev database.
+note: this run left smoke-a-* / smoke-b-* rows in the dev database.
       clear them with:
         bash scripts/dev-db.sh psql -c "delete from shelf_files where machine_id like 'smoke-%';"
 NOTE
