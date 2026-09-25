@@ -100,18 +100,26 @@ code,
 .topbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--page) 88%, transparent);
-  backdrop-filter: none;
+  background: var(--page);
   flex: 0 0 auto;
 }
 
-.brand {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+/* The desktop window uses an overlay title bar: the system traffic lights sit in
+   this bar, so it is taller, indented, and acts as the drag region. */
+html.tauri .topbar {
+  padding-left: 84px;
+  -webkit-app-region: drag;
+}
+
+html.tauri .topbar button,
+html.tauri .topbar .chip,
+html.tauri .topbar .facet,
+html.tauri .topbar input {
+  -webkit-app-region: no-drag;
 }
 
 .spacer {
@@ -121,14 +129,14 @@ code,
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 11.5px;
   cursor: default;
   white-space: nowrap;
 }
@@ -190,13 +198,14 @@ button.chip:hover {
 .icon-button {
   display: inline-grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--surface);
   color: var(--muted);
   cursor: pointer;
+  flex: 0 0 auto;
 }
 
 .icon-button:hover {
@@ -209,8 +218,8 @@ button.chip:hover {
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 6px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--line);
   flex: 0 0 auto;
   overflow-x: auto;
@@ -237,11 +246,12 @@ button.chip:hover {
 
 .search input {
   width: 100%;
-  height: 32px;
-  padding: 0 10px 0 32px;
+  height: 26px;
+  padding: 0 10px 0 30px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 7px;
   background: var(--surface);
+  font-size: 13px;
   outline: none;
 }
 
@@ -258,16 +268,16 @@ button.chip:hover {
 .facet {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px 0 8px;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px 0 7px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
-  font-size: 12.5px;
-  cursor: pointer;
+  font-size: 11.5px;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .facet[aria-pressed="true"] {
@@ -432,32 +442,38 @@ button.chip:hover {
 .reader-chrome {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
 .reader-heading {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
-  gap: 1px;
-}
-
-.reader-title,
-.reader-subtitle {
-  max-width: 34vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .reader-title {
-  font-size: 13px;
-  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 550;
   letter-spacing: -0.005em;
 }
 
+.reader-sep {
+  color: var(--quiet);
+  font-size: 11.5px;
+}
+
 .reader-subtitle {
+  flex: 0 1 auto;
+  max-width: 30vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--quiet);
   font-size: 11.5px;
 }
@@ -621,11 +637,11 @@ button.chip:hover {
   .row .meta {
     display: none;
   }
-  .reader-title,
-  .reader-subtitle {
-    max-width: 40vw;
-  }
-  .reader-subtitle {
+  .reader-subtitle,
+  .reader-sep {
     display: none;
+  }
+  .reader-title {
+    max-width: 44vw;
   }
 }

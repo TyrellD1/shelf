@@ -170,11 +170,16 @@ function createApp(
   const readerLeft = h("div", { class: "reader-chrome", attrs: { hidden: true } });
   const readerRight = h("div", { class: "reader-chrome", attrs: { hidden: true } });
   const readerTitle = h("span", { class: "reader-title" });
+  const readerSep = h("span", { class: "reader-sep", text: "·", attrs: { "aria-hidden": "true" } });
   const readerSubtitle = h("span", { class: "reader-subtitle" });
   const readerChrome: ReaderChrome = {
     setTitle(title, subtitle) {
       readerTitle.textContent = title;
+      readerTitle.title = title;
       readerSubtitle.textContent = subtitle;
+      const showSubtitle = subtitle.length > 0;
+      readerSubtitle.hidden = !showSubtitle;
+      readerSep.hidden = !showSubtitle;
     },
     setActions(actions) {
       readerLeft.replaceChildren(
@@ -185,9 +190,9 @@ function createApp(
             attrs: { type: "button", title: "Back to the shelf", "aria-label": "Back to the shelf" },
             on: { click: () => actions.back() },
           },
-          svg(ICONS.menu, 16),
+          svg(ICONS.menu, 14),
         ),
-        h("span", { class: "reader-heading" }, readerTitle, readerSubtitle),
+        h("span", { class: "reader-heading" }, readerTitle, readerSep, readerSubtitle),
       );
       readerRight.replaceChildren(
         h(
@@ -197,7 +202,7 @@ function createApp(
             attrs: { type: "button", title: "Open in a browser tab", "aria-label": "Open in a browser tab" },
             on: { click: () => actions.external() },
           },
-          svg(ICONS.external, 15),
+          svg(ICONS.external, 14),
         ),
       );
       readerLeft.hidden = false;
@@ -214,7 +219,6 @@ function createApp(
   const topbar = h(
     "div",
     { class: "topbar" },
-    h("span", { class: "brand", text: "Shelf" }),
     readerLeft,
     h("span", { class: "spacer" }),
     syncChip,

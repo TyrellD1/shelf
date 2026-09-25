@@ -13,11 +13,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" href="/icons/icon-192.png" />
     <script>
-      // Apply the stored theme before first paint.
+      // Apply the stored theme before first paint, and mark the desktop shell so
+      // the top bar can make room for the system traffic lights.
       try {
         const theme = localStorage.getItem("shelf-theme");
         if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
       } catch {}
+      if ("__TAURI_INTERNALS__" in window) document.documentElement.classList.add("tauri");
     </script>
   </head>
   <body>
