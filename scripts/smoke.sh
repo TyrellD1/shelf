@@ -146,4 +146,10 @@ expect_match "status knows both machines" 'smoke-machine-b' shelf "$A" status --
 
 step "result"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
+cat <<'NOTE'
+
+note: this run left smoke-machine-a / smoke-machine-b rows in the dev database.
+      clear them with:
+        bash scripts/dev-db.sh psql -c "delete from shelf_files where machine_id like 'smoke-%';"
+NOTE
 [ "$FAIL" -eq 0 ]
