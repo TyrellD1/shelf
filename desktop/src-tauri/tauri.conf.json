@@ -14,8 +14,8 @@
     "windows": [
       {
         "title": "Shelf",
-        "width": 1100,
-        "height": 780,
+        "width": 1708,
+        "height": 940,
         "minWidth": 480,
         "minHeight": 380,
         "resizable": true,

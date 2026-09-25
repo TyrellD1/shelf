@@ -35,6 +35,11 @@ fn main() {
         ])
         .register_uri_scheme_protocol("shelf", |_app, request| {
             let uri = request.uri().to_string();
+            let theme = request
+                .uri()
+                .query()
+                .and_then(|query| query_param(query, "theme"))
+                .filter(|value| value == "light" || value == "dark");
             let id = uri
                 .split("/view/")
                 .nth(1)
@@ -45,9 +50,9 @@ fn main() {
             if id.is_empty() {
                 return plain(404, "shelf: missing document id");
             }
-            match document(id) {
+            match document(id, theme.as_deref()) {
                 Ok(html) => {
-                    eprintln!("shelf: served {} ({} bytes)", id, html.len());
+                    eprintln!("shelf: served {} ({} bytes, {:?})", id, html.len(), theme);
                     http_response(200, DOCUMENT_CSP, html.into_bytes())
                 }
                 Err(error) => {
@@ -57,6 +62,7 @@ fn main() {
             }
         })
         .setup(|app| {
+            size_window(app.handle());
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event: OpenUrlEvent| {
                 for url in event.urls() {
@@ -226,6 +232,37 @@ fn announce(app: &AppHandle, payload: serde_json::Value) {
     let _ = app.emit("shelf:open", payload);
 }
 
+/// Opens at a comfortable size for the display it lands on, centred.
+fn size_window(app: &AppHandle) {
+    const PREFERRED_WIDTH: f64 = 1708.0;
+    const PREFERRED_HEIGHT: f64 = 940.0;
+    const MARGIN: f64 = 40.0;
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let monitor = window.current_monitor().ok().flatten().or_else(|| {
+        window.primary_monitor().ok().flatten()
+    });
+    let Some(monitor) = monitor else {
+        return;
+    };
+
+    let scale = monitor.scale_factor();
+    let work = monitor.work_area();
+    let width = (work.size.width as f64 / scale - MARGIN).min(PREFERRED_WIDTH);
+    let height = (work.size.height as f64 / scale - MARGIN).min(PREFERRED_HEIGHT);
+
+    let _ = window.set_size(tauri::LogicalSize::new(width, height));
+    let _ = window.center();
+    eprintln!(
+        "shelf: window theme {:?}, scale {scale}, work area {}x{}",
+        window.theme(),
+        work.size.width,
+        work.size.height
+    );
+}
+
 fn run_cli(args: &[String]) -> Result<Output, String> {
     let binary = resolve_cli()?;
     Command::new(&binary)
@@ -235,8 +272,8 @@ fn run_cli(args: &[String]) -> Result<Output, String> {
         .map_err(|error| format!("could not run {}: {error}", binary.display()))
 }
 
-/// Same bytes the reader would get from `shelf read <id>`.
-fn document(id: &str) -> Result<String, String> {
+/// Same bytes the reader would get from `shelf read <id>`, themed for the app.
+fn document(id: &str, theme: Option<&str>) -> Result<String, String> {
     let output = run_cli(&["read".into(), id.into()])?;
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -248,7 +285,51 @@ fn document(id: &str) -> Result<String, String> {
             message
         });
     }
-    String::from_utf8(output.stdout).map_err(|_| "document is not valid UTF-8".to_string())
+    let html = String::from_utf8(output.stdout).map_err(|_| "document is not valid UTF-8".to_string())?;
+    Ok(inject_theme(&html, theme))
+}
+
+/// Artifacts from the `/html` and `/slides` skills store their theme under the
+/// `html-theme` key and read it in a blocking script in `<head>`. Setting that
+/// key first, then correcting the attribute once their script has run, makes an
+/// artifact open in whatever theme the app is showing — without touching how the
+/// artifact was written.
+fn inject_theme(html: &str, theme: Option<&str>) -> String {
+    let Some(theme) = theme.filter(|value| *value == "light" || *value == "dark") else {
+        return html.to_string();
+    };
+    let script = format!("<script>{}</script>", theme_bootstrap(theme));
+    match html.find("<head") {
+        Some(start) => {
+            let insert_at = html[start..]
+                .find('>')
+                .map(|offset| start + offset + 1)
+                .unwrap_or(start);
+            let mut out = String::with_capacity(html.len() + script.len());
+            out.push_str(&html[..insert_at]);
+            out.push_str(&script);
+            out.push_str(&html[insert_at..]);
+            out
+        }
+        None => format!("{script}{html}"),
+    }
+}
+
+fn theme_bootstrap(theme: &str) -> String {
+    format!(
+        r#"(function(){{var theme="{theme}";var root=document.documentElement;function apply(){{try{{root.dataset.themePreference=theme;root.dataset.theme=theme}}catch(e){{}}}}try{{localStorage.setItem("html-theme",theme)}}catch(e){{}}apply();document.addEventListener("DOMContentLoaded",apply);addEventListener("message",function(event){{var next=event&&event.data&&event.data.shelfTheme;if(next!=="light"&&next!=="dark")return;theme=next;try{{localStorage.setItem("html-theme",next)}}catch(e){{}}apply()}});}})();"#
+    )
+}
+
+/// Reads one query parameter, percent-decoded.
+fn query_param(query: &str, key: &str) -> Option<String> {
+    for pair in query.split('&') {
+        let mut parts = pair.splitn(2, '=');
+        if parts.next() == Some(key) {
+            return parts.next().map(percent_decode);
+        }
+    }
+    None
 }
 
 fn http_response(status: u16, csp: &str, body: Vec<u8>) -> tauri::http::Response<Vec<u8>> {
@@ -380,8 +461,37 @@ mod tests {
         }
 
         std::env::set_var("SHELF_BIN", &binary);
-        assert_eq!(document("sf_test").expect("document"), "<h1>sf_test</h1>");
-        assert!(document("").is_err());
+        assert_eq!(document("sf_test", None).expect("document"), "<h1>sf_test</h1>");
+        assert!(document("", None).is_err());
         std::env::remove_var("SHELF_BIN");
+    }
+
+    #[test]
+    fn themes_are_injected_ahead_of_the_artifact() {
+        let html = "<html><head><meta charset=\"utf-8\"><script>var t=localStorage.getItem('html-theme')</script></head><body></body></html>";
+        let themed = inject_theme(html, Some("dark"));
+        let injected = themed.find("localStorage.setItem").expect("bootstrap injected");
+        let artifact = themed.find("var t=localStorage").expect("artifact script present");
+        assert!(injected < artifact, "bootstrap must run before the artifact reads the key");
+        assert!(themed.starts_with("<html><head><script>"));
+        assert!(themed.contains("<meta charset=\"utf-8\">"));
+        assert!(themed.contains("shelfTheme"));
+        assert!(themed.len() > html.len());
+
+        // No theme (or a nonsense one) leaves the document untouched.
+        assert_eq!(inject_theme(html, None), html);
+        assert_eq!(inject_theme(html, Some("system")), html);
+
+        // Headless fragments still get the bootstrap.
+        let fragment = inject_theme("<p>hi</p>", Some("light"));
+        assert!(fragment.starts_with("<script>"));
+        assert!(fragment.ends_with("<p>hi</p>"));
+    }
+
+    #[test]
+    fn reads_the_theme_from_the_query() {
+        assert_eq!(query_param("theme=dark&x=1", "theme"), Some("dark".into()));
+        assert_eq!(query_param("x=1&theme=light", "theme"), Some("light".into()));
+        assert_eq!(query_param("x=1", "theme"), None);
     }
 }
