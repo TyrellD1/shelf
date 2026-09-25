@@ -417,8 +417,8 @@ button.chip:hover {
 /* ---------------------------------------------------------------- reader */
 
 .reader {
-  position: fixed;
-  inset: 0;
+  flex: 1 1 auto;
+  min-height: 0;
   background: var(--surface);
 }
 
@@ -429,38 +429,37 @@ button.chip:hover {
   display: block;
 }
 
-.reader-bar {
-  position: fixed;
-  top: 10px;
-  left: 10px;
+.reader-chrome {
   display: flex;
   align-items: center;
   gap: 8px;
-  z-index: 20;
+  min-width: 0;
 }
 
-.reader-bar .label {
-  max-width: 46vw;
-  padding: 5px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  font-size: 12.5px;
-  color: var(--muted);
+.reader-heading {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.reader-title,
+.reader-subtitle {
+  max-width: 34vw;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0;
-  transition: opacity 140ms ease;
 }
 
-.reader-bar:hover .label,
-.reader-bar:focus-within .label {
-  opacity: 1;
+.reader-title {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
 }
 
-.reader-bar button {
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+.reader-subtitle {
+  color: var(--quiet);
+  font-size: 11.5px;
 }
 
 /* --------------------------------------------------------------- palette */
@@ -622,7 +621,11 @@ button.chip:hover {
   .row .meta {
     display: none;
   }
-  .reader-bar .label {
+  .reader-title,
+  .reader-subtitle {
+    max-width: 40vw;
+  }
+  .reader-subtitle {
     display: none;
   }
 }

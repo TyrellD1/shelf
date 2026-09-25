@@ -1,9 +1,10 @@
 import "./style.css";
 import type { ShelfFileMeta } from "@shelf/shared";
 import { createAdapter, isTauri, type DataAdapter, type StatusInfo } from "./adapter.js";
-import type { AppContext } from "./context.js";
+import type { AppContext, ReaderChrome } from "./context.js";
 import { ICONS, h, mount, svg } from "./dom.js";
 import { relativeTime } from "./logic.js";
+import { notifyTheme } from "./theme.js";
 import { createListView, type ListView } from "./views/list.js";
 import { createReaderView, type ReaderView } from "./views/reader.js";
 import { openPalette } from "./views/palette.js";
@@ -60,6 +61,7 @@ function themeButton(): HTMLButtonElement {
         } catch {
           // private mode
         }
+        notifyTheme(next);
         apply();
       },
     },
@@ -86,7 +88,12 @@ async function boot(): Promise<void> {
   }
 
   if (adapter.kind === "network" && !status.configured) {
-    const ctx = contextFor(adapter, () => status, () => undefined);
+    const noopChrome: ReaderChrome = {
+      setTitle: () => undefined,
+      setActions: () => undefined,
+      clear: () => undefined,
+    };
+    const ctx = contextFor(adapter, () => status, () => undefined, noopChrome);
     renderLoginInto(root, ctx, () => void boot());
     return;
   }
@@ -96,11 +103,12 @@ async function boot(): Promise<void> {
   app.start();
 }
 
-/** Context factory. `listView` is patched in by createApp so chrome updates reach it. */
+/** Context factory. The app patches in the Chrome handles and a status getter. */
 function contextFor(
   adapter: DataAdapter,
   currentStatus: () => StatusInfo,
   refreshChrome: () => void,
+  readerChrome: ReaderChrome,
 ): AppContext {
   const cache = new Map<string, ShelfFileMeta>();
   const ctx: AppContext = {
@@ -123,6 +131,7 @@ function contextFor(
     cacheFile: (file) => cache.set(file.id, file),
     getCachedFile: (id) => cache.get(id),
     refreshChrome,
+    readerChrome,
   };
   return ctx;
 }
@@ -141,8 +150,7 @@ function createApp(
 
   const viewHost = h("div", { class: "view-host" });
   const syncChip = h("button", { class: "chip", attrs: { type: "button" } });
-  const userChip = h("span", { class: "chip", attrs: { hidden: true } });
-  const signOutButton = h(
+  const userChip = h("span", { class: "chip", attrs: { hidden: true } });  const signOutButton = h(
     "button",
     {
       class: "icon-button",
@@ -157,19 +165,67 @@ function createApp(
     svg(ICONS.logout, 15),
   );
   const theme = themeButton();
+
+  // Reader controls live in the top bar, next to the wordmark.
+  const readerLeft = h("div", { class: "reader-chrome", attrs: { hidden: true } });
+  const readerRight = h("div", { class: "reader-chrome", attrs: { hidden: true } });
+  const readerTitle = h("span", { class: "reader-title" });
+  const readerSubtitle = h("span", { class: "reader-subtitle" });
+  const readerChrome: ReaderChrome = {
+    setTitle(title, subtitle) {
+      readerTitle.textContent = title;
+      readerSubtitle.textContent = subtitle;
+    },
+    setActions(actions) {
+      readerLeft.replaceChildren(
+        h(
+          "button",
+          {
+            class: "icon-button",
+            attrs: { type: "button", title: "Back to the shelf", "aria-label": "Back to the shelf" },
+            on: { click: () => actions.back() },
+          },
+          svg(ICONS.menu, 16),
+        ),
+        h("span", { class: "reader-heading" }, readerTitle, readerSubtitle),
+      );
+      readerRight.replaceChildren(
+        h(
+          "button",
+          {
+            class: "icon-button",
+            attrs: { type: "button", title: "Open in a browser tab", "aria-label": "Open in a browser tab" },
+            on: { click: () => actions.external() },
+          },
+          svg(ICONS.external, 15),
+        ),
+      );
+      readerLeft.hidden = false;
+      readerRight.hidden = false;
+    },
+    clear() {
+      readerLeft.hidden = true;
+      readerRight.hidden = true;
+      readerLeft.replaceChildren();
+      readerRight.replaceChildren();
+    },
+  };
+
   const topbar = h(
     "div",
     { class: "topbar" },
     h("span", { class: "brand", text: "Shelf" }),
+    readerLeft,
     h("span", { class: "spacer" }),
     syncChip,
     userChip,
     signOutButton,
+    readerRight,
     theme,
   );
   const element = h("div", { class: "app" }, topbar, viewHost);
 
-  const ctx = contextFor(adapter, () => statusRef.value, () => renderChrome());
+  const ctx = contextFor(adapter, () => statusRef.value, () => renderChrome(), readerChrome);
 
   function renderChrome(): void {
     if (adapter.kind === "local") {
@@ -261,6 +317,14 @@ function createApp(
     renderChrome();
     route();
     window.addEventListener("hashchange", route);
+
+    // Follow the system theme when no manual choice is stored, and tell open
+    // documents about it.
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => {
+      if (document.documentElement.dataset.theme === "light") return;
+      if (document.documentElement.dataset.theme === "dark") return;
+      notifyTheme(event.matches ? "dark" : "light");
+    });
 
     window.addEventListener("keydown", (event) => {
       const mod = event.metaKey || event.ctrlKey;

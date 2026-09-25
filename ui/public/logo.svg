@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="#202020" role="img" aria-labelledby="title description">
+  <title id="title">Shelf</title>
+  <desc id="description">Three books held by a shelf. The left spine flows into the base, and a gray book rests on the shelf and leans against the upright book.</desc>
+  <path d="M24 26a4 4 0 0 1 4-4h14v66h66v12a4 4 0 0 1-4 4H36a12 12 0 0 1-12-12V26Z"/>
+  <path d="M50 22h16v58H50V22Z"/>
+  <path d="m66 38 15-4 14 50-15 4-14-50Z" fill="#A3A3A3"/>
+</svg>

@@ -84,4 +84,5 @@ export const ICONS = {
   logout: "M15 12H4m0 0 3.5-3.5M4 12l3.5 3.5M12 4h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6",
   close: "M6 6l12 12M18 6 6 18",
   check: "M4 12.5 9 17.5 20 6.5",
+  external: "M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
 } as const;

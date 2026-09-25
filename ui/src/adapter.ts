@@ -1,4 +1,5 @@
-import type { ListResponse, MeResponse, ShelfFile, ShelfFileMeta, SortKey } from "@shelf/shared";
+import type { ShelfFile, ShelfFileMeta, ListResponse, MeResponse, SortKey } from "@shelf/shared";
+import { currentTheme, injectTheme } from "./theme.js";
 
 export interface SyncResult {
   configured: boolean;
@@ -141,7 +142,7 @@ export function createLocalAdapter(): DataAdapter {
     },
 
     async readerSource(file) {
-      return `shelf://localhost/view/${encodeURIComponent(file.id)}`;
+      return `shelf://localhost/view/${encodeURIComponent(file.id)}?theme=${currentTheme()}`;
     },
 
     async setup() {
@@ -239,7 +240,7 @@ export function createNetworkAdapter(): DataAdapter {
 
     async readerSource(file) {
       const record = await api<ShelfFile>(`/api/files/${encodeURIComponent(file.id)}`);
-      const blob = new Blob([record.html], { type: "text/html" });
+      const blob = new Blob([injectTheme(record.html, currentTheme())], { type: "text/html" });
       return URL.createObjectURL(blob);
     },
 
