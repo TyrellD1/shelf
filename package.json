@@ -1,7 +1,7 @@
 {
   "name": "shelf",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local-first shelf for agent-generated HTML: CLI, desktop app, and PWA.",
   "license": "MIT",
   "engines": {

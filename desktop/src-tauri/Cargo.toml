@@ -1,6 +1,6 @@
 [package]
 name = "shelf-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "Shelf — a local-first shelf for HTML written by agents"
 authors = ["Tyrell Downer"]
 edition = "2021"
