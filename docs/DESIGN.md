@@ -151,8 +151,19 @@ It is a five-line contract that survives the artifacts changing shape, because i
 own documented mechanism.
 
 ### The reader lives in the top bar
+The app uses an overlay title bar (`hiddenTitle` + `titleBarStyle: "Overlay"` + `trafficLightPosition`),
+so the macOS traffic lights sit inside the app's own 44 px bar. The bar is the drag region and
+interactive children opt out with `-webkit-app-region: no-drag`; `html.tauri` adds the 84 px left
+indent that keeps controls clear of the lights (the PWA gets the same bar without the indent).
 Floating controls over a document break the one thing the reader is for, so the back button, the
-title and "open in a browser tab" sit in the app's top bar and the iframe owns everything below it.
+title and "open in a browser tab" sit in that bar while the iframe owns everything below it.
+
+### Paths are anchored to the git root
+`path_on_machine` is the file's path relative to the repository root when it lives in a repository
+(`cli/src/lib/writer.ts`), falling back to the current directory and then `$HOME`. Writing
+`docs/report.html` from the repo root and `./report.html` from inside `docs/` therefore produce the
+same shelf path instead of two copies of one document. Outside a repository the old rule applies,
+so nothing changes for loose files.
 
 ### The window sizes itself once per display
 1708x940 preferred, clamped to the monitor work area and centred (`size_window` in `main.rs`). No
