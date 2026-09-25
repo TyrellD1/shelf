@@ -116,9 +116,20 @@ addresses in `ALLOWED_EMAILS` can sign in at all.
 so the terminal and the window never disagree. `shelf sync` streams progress lines that the app
 turns into a "syncing / in sync" chip. Documents are served to the reader iframe from a
 `shelf://` protocol handler with `default-src 'none'` — artifacts can run their own inline
-scripts, but they cannot reach the network.
+scripts, but they cannot reach the network. The reader's controls live in the top bar, so nothing
+floats over the document, and the window opens at 1708x940 (clamped to the display) instead of a
+postage stamp.
 
 **PWA.** The same UI bundle, hosted by the Worker, reading `/api/*` with a session cookie.
+
+## Theming
+
+`/html` and `/slides` artifacts keep their theme under a `html-theme` key and read it in a
+blocking script in `<head>`. When the app serves an artifact it injects three lines ahead of that
+script: write the app's current theme into the key, re-assert it on `DOMContentLoaded`, and follow
+`postMessage({ shelfTheme })` afterwards. The desktop passes the theme through the `shelf://`
+query, the PWA injects it into the blob. Artifacts are untouched on disk and know nothing about
+Shelf; they simply open in the theme the app is showing, and follow a live toggle.
 
 ## Local development
 

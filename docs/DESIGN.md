@@ -139,6 +139,26 @@ identity: every row carries a tint and a 3 px bar derived from a hand-written FN
 machine id (`shared/src/color.ts`), desaturated (low saturation, two values per theme) so it
 reads as a label, not decoration. Filter chips reuse the same swatch.
 
+### Artifacts inherit the app theme instead of being re-authored
+`/html` and `/slides` artifacts read `localStorage['html-theme']` in a blocking `<head>` script,
+falling back to `prefers-color-scheme`. Rather than change how they are written (or wrap them in
+something that rewrites their styles), the reader injects a bootstrap immediately after `<head>`:
+it writes the app's theme into that same key before their script runs, re-asserts
+`data-theme`/`data-themePreference` on `DOMContentLoaded` (their script may have overwritten both),
+and re-applies on `postMessage`, which is how a live app toggle reaches a document that is already
+open. The desktop carries the value in the `shelf://` query string; the PWA injects it into the blob.
+It is a five-line contract that survives the artifacts changing shape, because it rides on their
+own documented mechanism.
+
+### The reader lives in the top bar
+Floating controls over a document break the one thing the reader is for, so the back button, the
+title and "open in a browser tab" sit in the app's top bar and the iframe owns everything below it.
+
+### The window sizes itself once per display
+1708x940 preferred, clamped to the monitor work area and centred (`size_window` in `main.rs`). No
+persistence yet: a laptop screen and a 3440-wide monitor both get a sane window, at the cost of
+forgetting a manual resize.
+
 ## 3. Verification
 
 - `npm test` — ids/paths/versioning, CLI flag parsing + index queries, UI list/search logic.
