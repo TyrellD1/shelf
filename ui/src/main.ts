@@ -186,11 +186,11 @@ function createApp(
         h(
           "button",
           {
-            class: "icon-button",
+            class: "icon-button bare",
             attrs: { type: "button", title: "Back to the shelf", "aria-label": "Back to the shelf" },
             on: { click: () => actions.back() },
           },
-          svg(ICONS.menu, 14),
+          svg(ICONS.arrowLeft, 16),
         ),
         h("span", { class: "reader-heading" }, readerTitle, readerSep, readerSubtitle),
       );

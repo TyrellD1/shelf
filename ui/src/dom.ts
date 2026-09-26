@@ -78,6 +78,7 @@ export function svg(path: string, size = 18): SVGSVGElement {
 export const ICONS = {
   search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5.5 12.5L21 21",
   menu: "M4 7h16M4 12h16M4 17h16",
+  arrowLeft: "M15 5 8 12l7 7",
   refresh: "M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5",
   sun: "M12 4V2m0 20v-2M4 12H2m20 0h-2M6 6 4.5 4.5M18 18l1.5 1.5M6 18 4.5 19.5M18 6l1.5-1.5M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z",
   moon: "M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z",

@@ -223,6 +223,19 @@ button.chip:hover {
   border-color: var(--muted);
 }
 
+/* An icon that is its own button: no box until you hover it. */
+.icon-button.bare {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+}
+
+.icon-button.bare:hover {
+  background: var(--surface-deep);
+  border-color: transparent;
+}
+
 /* --------------------------------------------------------------- toolbar */
 
 .toolbar {
@@ -452,7 +465,7 @@ button.chip:hover {
 .reader-chrome {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   min-width: 0;
 }
 
