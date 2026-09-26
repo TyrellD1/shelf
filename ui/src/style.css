@@ -117,17 +117,11 @@ code,
 }
 
 /* The desktop window uses an overlay title bar: the system traffic lights sit in
-   this bar, so it is indented, and it acts as the drag region. */
+   this bar, so the controls start clear of them. Dragging is handled by Tauri
+   through `data-tauri-drag-region` on the bar (see main.ts); `-webkit-app-region`
+   is an Electron-only property and does nothing in a WKWebView. */
 html.tauri .topbar {
-  padding-left: 84px;
-  -webkit-app-region: drag;
-}
-
-html.tauri .topbar button,
-html.tauri .topbar .chip,
-html.tauri .topbar .facet,
-html.tauri .topbar input {
-  -webkit-app-region: no-drag;
+  padding-left: 100px;
 }
 
 .spacer {

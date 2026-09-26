@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Everything the Shelf window needs: core APIs (events, window) and deep links.",
+  "description": "Everything the Shelf window needs: core APIs (events, window) and deep links, plus the permission that makes a `data-tauri-drag-region` draggable.",
   "windows": ["main"],
-  "permissions": ["core:default", "deep-link:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging", "deep-link:default"]
 }

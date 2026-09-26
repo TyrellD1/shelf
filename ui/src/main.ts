@@ -218,7 +218,14 @@ function createApp(
 
   const topbar = h(
     "div",
-    { class: "topbar" },
+    {
+      class: "topbar",
+      // Tauri starts a window drag on mousedown inside this subtree; buttons and
+      // inputs are skipped by Tauri itself. Ignored by the PWA, which has no
+      // window to drag. `-webkit-app-region` is Electron-only and does nothing
+      // here, which is why the bar was not draggable before.
+      attrs: { "data-tauri-drag-region": "deep" },
+    },
     readerLeft,
     h("span", { class: "spacer" }),
     syncChip,
