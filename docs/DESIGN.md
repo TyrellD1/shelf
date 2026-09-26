@@ -152,14 +152,29 @@ own documented mechanism.
 
 ### The reader lives in the top bar
 The app uses an overlay title bar (`hiddenTitle` + `titleBarStyle: "Overlay"` + `trafficLightPosition`),
-so the macOS traffic lights sit inside the app's own 44 px bar. Two numbers had to be measured rather
-than guessed: the lights' centre lands at `trafficLightPosition.y - 2.25` CSS px (so `y: 24` puts them
-on a 44 px bar's centre line, confirmed with `scripts/measure-topbar.mjs`), and `<button>` carries a
-UA `padding: 1px 6px` that pushes a supposedly centred icon off by 2.5 px until it is reset. The bar
-is the drag region and interactive children opt out with `-webkit-app-region: no-drag`; `html.tauri`
-adds the 84 px left indent that keeps controls clear of the lights (the PWA gets the same bar without
-the indent). Floating controls over a document break the one thing the reader is for, so the back
-button, the title and "open in a browser tab" sit in that bar while the iframe owns everything below it.
+so the macOS traffic lights sit inside the app's own 44 px bar. Three things had to be measured rather
+than guessed:
+
+- The lights' centre lands at `trafficLightPosition.y - 2.25` CSS px, so `y: 24` puts them on a 44 px
+  bar's centre line (confirmed with `scripts/measure-topbar.mjs`).
+- `<button>` carries a UA `padding: 1px 6px` that pushes a supposedly centred icon off by 2.5 px
+  until it is reset.
+- Dragging. `-webkit-app-region: drag` is an Electron property; a WKWebView ignores it, which is why
+  the bar could not be grabbed at first. Tauri starts the drag itself on mousedown inside an element
+  marked `data-tauri-drag-region` (`"deep"` covers the whole subtree; buttons and inputs are skipped
+  for us), and that invoke is permissioned — without `core:window:allow-start-dragging` in
+  `capabilities/default.json` the handler runs and the window simply never moves.
+
+`html.tauri` indents the bar 100 px so the controls clear the lights, the back arrow is a bare icon
+rather than another boxed button, and the PWA gets the same bar without the indent. Floating controls
+over a document break the one thing the reader is for, so the back button, the title and "open in
+your browser" sit in that bar while the iframe owns everything below it.
+
+That last button has to mean different things per host. The desktop reader points its iframe at
+`shelf://localhost/...`, which Safari cannot resolve, so it runs `shelf reveal <path>` instead: the
+CLI resolves the entry and hands the shelf's own file to macOS, showing the artifact exactly as it
+was written, with no theme injection and no write. The PWA has nothing to hand over — the document
+is already a blob it owns — so it opens that blob in a tab.
 
 ### Paths are anchored to the git root
 `path_on_machine` is the file's path relative to the repository root when it lives in a repository
