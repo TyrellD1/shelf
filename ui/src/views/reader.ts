@@ -1,4 +1,5 @@
-import { ICONS, h, svg } from "../dom.js";
+import type { ShelfFileMeta } from "@shelf/shared";
+import { h } from "../dom.js";
 import { formatBytes, relativeTime, titleOf } from "../logic.js";
 import { currentTheme, onThemeChange } from "../theme.js";
 import type { AppContext } from "../context.js";
@@ -26,13 +27,17 @@ export function createReaderView(ctx: AppContext, id: string): ReaderView {
   const view = h("div", { class: "reader" }, iframe);
   const element = view;
   let source: string | null = null;
+  let file: ShelfFileMeta | null = null;
   let disposed = false;
 
   ctx.readerChrome.setTitle("Loading…", "");
   ctx.readerChrome.setActions({
     back: () => ctx.closeReader(),
     external: () => {
-      if (source) window.open(source, "_blank", "noopener");
+      if (!file) return;
+      void ctx.adapter.openExternal(file, source).catch((error: unknown) => {
+        ctx.toast(`Could not open your browser: ${error instanceof Error ? error.message : error}`);
+      });
     },
   });
 
@@ -56,9 +61,9 @@ export function createReaderView(ctx: AppContext, id: string): ReaderView {
   window.addEventListener("keydown", onKey);
 
   void (async () => {
-    const file = ctx.getCachedFile(id) ?? (await ctx.adapter.get(id));
+    const found = ctx.getCachedFile(id) ?? (await ctx.adapter.get(id));
     if (disposed) return;
-    if (!file) {
+    if (!found) {
       ctx.readerChrome.setTitle("Not on this device", id);
       view.replaceChildren(
         h(
@@ -75,12 +80,13 @@ export function createReaderView(ctx: AppContext, id: string): ReaderView {
       );
       return;
     }
-    ctx.cacheFile(file);
+    ctx.cacheFile(found);
+    file = found;
     ctx.readerChrome.setTitle(
-      titleOf(file),
-      `${file.machineId} · ${formatBytes(file.bytes)} · ${relativeTime(file.editedAt)}`,
+      titleOf(found),
+      `${found.machineId} · ${formatBytes(found.bytes)} · ${relativeTime(found.editedAt)}`,
     );
-    source = await ctx.adapter.readerSource(file);
+    source = await ctx.adapter.readerSource(found);
     if (disposed) {
       ctx.adapter.releaseReaderSource?.(source);
       return;

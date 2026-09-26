@@ -199,7 +199,11 @@ function createApp(
           "button",
           {
             class: "icon-button",
-            attrs: { type: "button", title: "Open in a browser tab", "aria-label": "Open in a browser tab" },
+            attrs: {
+              type: "button",
+              title: "Open the file in your browser",
+              "aria-label": "Open the file in your browser",
+            },
             on: { click: () => actions.external() },
           },
           svg(ICONS.external, 14),

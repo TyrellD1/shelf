@@ -51,6 +51,12 @@ export interface DataAdapter {
   /** Where the reader iframe should point. */
   readerSource(file: ShelfFileMeta): Promise<string>;
   releaseReaderSource?(source: string): void;
+  /**
+   * Hands the document to the user's own browser, which the app cannot do
+   * itself: the desktop opens the shelf's file on disk through the CLI, the PWA
+   * opens the page it already built as a blob.
+   */
+  openExternal(file: ShelfFileMeta, source: string | null): Promise<void>;
   signIn?(email: string, password: string): Promise<void>;
   signOut?(): Promise<void>;
   /** Runs `shelf setup` (opens the browser) from inside the desktop app. */
@@ -143,6 +149,12 @@ export function createLocalAdapter(): DataAdapter {
 
     async readerSource(file) {
       return `shelf://localhost/view/${encodeURIComponent(file.id)}?theme=${currentTheme()}`;
+    },
+
+    async openExternal(file) {
+      // The CLI owns the store, so it resolves the file and hands it to macOS;
+      // `shelf://` URLs mean nothing to a browser and blobs do not exist here.
+      await run(["reveal", file.path, "--json"]);
     },
 
     async setup() {
@@ -246,6 +258,10 @@ export function createNetworkAdapter(): DataAdapter {
 
     releaseReaderSource(source) {
       if (source.startsWith("blob:")) URL.revokeObjectURL(source);
+    },
+
+    async openExternal(_file, source) {
+      if (source) window.open(source, "_blank", "noopener");
     },
 
     async signIn(email, password) {
