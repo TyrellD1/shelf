@@ -40,6 +40,7 @@ Nothing else is required. Do not chmod, move, or copy the file elsewhere.
 ```bash
 shelf list --json --search <fragment> --limit 20   # what's already there
 shelf read <id|path> --meta --json                 # metadata for one file
+shelf reveal <id|path> --print --json              # where the shelf's copy lives on disk
 shelf status --json                                # api, machine id, pending pushes
 ```
 

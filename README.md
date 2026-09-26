@@ -67,6 +67,7 @@ shelf setup                    # opens the browser, signs you in, asks for a mac
 shelf write ./report.html --json
 shelf open  ./report.html      # writes it if needed, then opens it in the desktop app
 shelf list
+shelf reveal ./report.html     # that file, in your browser, straight from the shelf
 shelf sync                     # push local writes, pull other machines' files
 shelf status
 ```
@@ -82,6 +83,7 @@ shelf status
 | `shelf open <path> [--browser]` | Write if missing, then open in the desktop app (falls back to the browser) |
 | `shelf list [--search q] [--machine id] [--sort created\|edited] [--limit n]` | The shelf, newest first |
 | `shelf read <id\|path> [--meta]` | Raw HTML on stdout (what the desktop reader uses) |
+| `shelf reveal <id\|path> [--print]` | Open the shelf's own copy of a file in your browser. Never writes or pushes |
 | `shelf sync [--pull-only\|--push-only]` | Push local writes, pull other machines |
 | `shelf status [--check]` | Config, counts, pending pushes, last sync |
 | `shelf machine [set <id>]` | Show or change this machine's id |

@@ -1,5 +1,6 @@
 import { readCommand, listCommand } from "./commands/list.js";
 import { openCommand } from "./commands/open.js";
+import { revealCommand } from "./commands/reveal.js";
 import { setupCommand } from "./commands/setup.js";
 import { machineCommand, logoutCommand, statusCommand } from "./commands/status.js";
 import { syncCommand } from "./commands/sync.js";
@@ -16,6 +17,7 @@ usage
   shelf setup [--api <url>] [--machine <id>]   authorize this machine in the browser
   shelf write <path.html> [--replace|--as-new] write (and push) a file
   shelf open <path.html> [--browser]           write if needed, then open in the app
+  shelf reveal <id|path> [--print]             open the shelf's copy in your browser
   shelf list [--search <q>] [--machine <id>] [--limit n] [--sort created|edited]
   shelf read <id|path> [--meta]                print a file (or its metadata)
   shelf sync [--pull-only|--push-only]         push local writes, pull other machines
@@ -51,6 +53,8 @@ export async function run(argv: string[]): Promise<void> {
     case "read":
     case "cat":
       return readCommand(args, output);
+    case "reveal":
+      return revealCommand(args, output);
     case "sync":
       return syncCommand(args, output);
     case "status":

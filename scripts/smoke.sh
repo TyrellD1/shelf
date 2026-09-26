@@ -131,6 +131,10 @@ printf '<!doctype html><title>Smoke</title><h1>hello shelf</h1>' > "$TMP/report.
 expect_match "write pushes" '"pushed": true' shelf "$A" write "$TMP/report.html" --json
 expect_match "list shows the file" 'report.html' shelf "$A" list --json
 expect_match "read returns the html" 'hello shelf' shelf "$A" read report.html
+expect_match "reveal --print resolves the shelf's own copy" "html/$MACHINE_A/.*report.html" \
+  shelf "$A" reveal report.html --print
+expect_match "reveal reports a path it does not have" '"code": "not_found"' \
+  shelf "$A" reveal no-such-file.html --json
 
 step "immutable paths"
 printf '<!doctype html><title>Smoke</title><h1>second</h1>' > "$TMP/report.html"
