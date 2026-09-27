@@ -101,6 +101,19 @@ means the window and the terminal can never disagree, and there is exactly one p
 is that the app has no store logic to keep in sync with the CLI, and `shelf sync --stream`
 gives it real progress lines to show in the "syncing / in sync" chip.
 
+Rust never opens a store file, so the only interesting thing it does with the CLI is start it, and
+that is not always just `Command::new` (see the Dock note in section 4).
+
+### Every icon comes from `logo.svg`
+`scripts/make-icons.mjs` reads `ui/public/logo.svg`, lays the mark on the standard rounded tile
+(paper marks on a dark tile, so they stay visible on a dark Dock, with the one gray book kept
+gray), and rasterises that: `tauri icon` writes the macOS/Windows bundle set including
+`icon.icns`, and `sips` makes the PWA sizes from the 1024 px render. A second, maskable variant
+scales the mark into the safe zone for platform masking, and the Android/iOS sets Tauri also
+emits are deleted, since Shelf ships as a desktop app. Before this, the icon was drawn a second
+time inside the script with its own geometry, which is exactly how a logo and an app icon drift
+apart.
+
 ### Artifacts cannot phone home on the desktop
 The reader iframe points at `shelf://localhost/view/<id>`; the Rust handler runs `shelf read <id>`
 and returns the bytes with

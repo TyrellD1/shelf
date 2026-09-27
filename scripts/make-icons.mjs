@@ -1,157 +1,107 @@
 /**
- * Generates the Shelf icons (a dark rounded square with three shelf bars).
- * No image libraries: raw RGBA -> PNG via zlib. Run: npm run icons
+ * Generates every Shelf icon from one source: `ui/public/logo.svg`.
+ *
+ * The mark on its own is dark ink on transparent, which disappears on a dark
+ * Dock, so the app icons put it on the usual rounded square: paper books on a
+ * dark tile. `tauri icon` rasterises the composed SVG into the macOS/Windows
+ * bundle set (including icon.icns), and `sips` makes the PWA sizes from the
+ * 1024 px render.
+ *
+ * Run: npm run icons   (macOS, for sips)
  */
-import { deflateSync } from "node:zlib";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const outDir = join(root, "ui", "public", "icons");
-mkdirSync(outDir, { recursive: true });
+const logo = readFileSync(join(root, "ui", "public", "logo.svg"), "utf8");
 
-const INK = [17, 17, 17];
-const PAPER = [242, 242, 242];
-const MID = [154, 154, 154];
+/** Palette shared with the SVG: ink tile, paper marks, one gray book. */
+const TILE = "#111111";
+const INK = "#202020";
+const PAPER = "#F2F2F2";
 
-function render(size) {
-  const scale = 3;
-  const big = size * scale;
-  const pixels = new Uint8Array(size * size * 4);
+/** Corner radius as a share of the tile, matching macOS icon geometry. */
+const RADIUS = 28;
 
-  // Rounded square background.
-  const radius = big * 0.22;
-  for (let y = 0; y < big; y++) {
-    for (let x = 0; x < big; x++) {
-      const inside = insideRoundedRect(x, y, big, big, radius);
-      if (!inside) continue;
-      setBig(x, y, INK, 1);
-    }
+/** `ui/public/logo.svg` is 128 wide, and its mark runs from 24..108 by 22..100. */
+const MARK_CENTER = { x: 66, y: 61 };
+
+const work = mkdtempSync(join(tmpdir(), "shelf-icons-"));
+try {
+  const appIcon = compose({ radius: RADIUS, scale: 1 });
+  const maskable = compose({ radius: 0, scale: 0.82 });
+
+  const appIconSvg = join(work, "icon.svg");
+  const maskableSvg = join(work, "icon-maskable.svg");
+  writeFileSync(appIconSvg, appIcon);
+  writeFileSync(maskableSvg, maskable);
+
+  // The bundle icon set: 32/64/128/256/512 PNGs plus icon.icns and icon.ico.
+  tauriIcon(appIconSvg, join(root, "desktop", "src-tauri", "icons"));
+  // Shelf ships as a desktop app, so drop the mobile sets `tauri icon` leaves behind.
+  const iconsDir = join(root, "desktop", "src-tauri", "icons");
+  for (const platform of ["android", "ios"]) {
+    rmSync(join(iconsDir, platform), { recursive: true, force: true });
   }
+  const maskableDir = join(work, "maskable");
+  tauriIcon(maskableSvg, maskableDir);
 
-  // Three "books" standing on a shelf line.
-  const shapes = [
-    { x0: 0.285, y0: 0.42, x1: 0.385, y1: 0.7, color: PAPER, radius: 0.018 },
-    { x0: 0.425, y0: 0.3, x1: 0.525, y1: 0.7, color: MID, radius: 0.018 },
-    { x0: 0.565, y0: 0.48, x1: 0.665, y1: 0.7, color: PAPER, radius: 0.018 },
-    { x0: 0.24, y0: 0.7, x1: 0.76, y1: 0.765, color: PAPER, radius: 0.03 },
-  ];
-
-  for (const shape of shapes) {
-    const x0 = big * shape.x0;
-    const y0 = big * shape.y0;
-    const x1 = big * shape.x1;
-    const y1 = big * shape.y1;
-    const r = big * shape.radius;
-    for (let y = Math.floor(y0 - 1); y < Math.ceil(y1 + 1); y++) {
-      for (let x = Math.floor(x0 - 1); x < Math.ceil(x1 + 1); x++) {
-        const cx = Math.min(Math.max(x + 0.5, x0 + r), x1 - r);
-        const cy = Math.min(Math.max(y + 0.5, y0 + r), y1 - r);
-        if (distance(x + 0.5, y + 0.5, cx, cy) <= r) setBig(x, y, shape.color, 1);
-      }
-    }
+  // PWA icons come from the 1024 px renders.
+  const outDir = join(root, "ui", "public", "icons");
+  for (const [source, size, name] of [
+    [join(iconsDir, "icon.png"), 192, "icon-192.png"],
+    [join(iconsDir, "icon.png"), 512, "icon-512.png"],
+    [join(iconsDir, "icon.png"), 1024, "icon-1024.png"],
+    [join(maskableDir, "icon.png"), 512, "icon-maskable-512.png"],
+  ]) {
+    const target = join(outDir, name);
+    sips(source, size, target);
+    console.log(`wrote ${target.replace(`${root}/`, "")}`);
   }
-
-  // Downsample with a box filter for anti-aliasing.
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
-      for (let sy = 0; sy < scale; sy++) {
-        for (let sx = 0; sx < scale; sx++) {
-          const index = ((y * scale + sy) * big + (x * scale + sx)) * 4;
-          const alpha = bigAlpha[index + 3] / 255;
-          r += bigRgba[index] * alpha;
-          g += bigRgba[index + 1] * alpha;
-          b += bigRgba[index + 2] * alpha;
-          a += alpha;
-        }
-      }
-      const target = (y * size + x) * 4;
-      if (a > 0) {
-        pixels[target] = Math.round(r / a);
-        pixels[target + 1] = Math.round(g / a);
-        pixels[target + 2] = Math.round(b / a);
-        pixels[target + 3] = Math.round((a / (scale * scale)) * 255);
-      }
-    }
-  }
-
-  return pixels;
-
-  function insideRoundedRect(x, y, width, height, r) {
-    const cx = Math.min(Math.max(x + 0.5, r), width - r);
-    const cy = Math.min(Math.max(y + 0.5, r), height - r);
-    return distance(x + 0.5, y + 0.5, cx, cy) <= r;
-  }
-
-  function distance(ax, ay, bx, by) {
-    return Math.hypot(ax - bx, ay - by);
-  }
-
-  function setBig(x, y, color, alpha) {
-    if (x < 0 || y < 0 || x >= big || y >= big) return;
-    const index = (y * big + x) * 4;
-    bigRgba[index] = color[0];
-    bigRgba[index + 1] = color[1];
-    bigRgba[index + 2] = color[2];
-    bigAlpha[index + 3] = Math.round(alpha * 255);
-  }
+  console.log(`wrote desktop/src-tauri/icons/ (icon.icns, icon.ico, PNG set)`);
+} finally {
+  rmSync(work, { recursive: true, force: true });
 }
 
-const bigRgba = new Uint8Array(4096 * 4096 * 4);
-const bigAlpha = bigRgba;
+/**
+ * Builds the app tile around the logo's own paths: ink marks become paper (so
+ * they read on a dark tile), and a mark that names its own fill keeps it.
+ */
+function compose({ radius, scale }) {
+  const paths = [...logo.matchAll(/<path\b([^>]*)\/?>/g)].map(([, attributes]) => {
+    const d = /\bd="([^"]+)"/.exec(attributes)?.[1];
+    if (!d) throw new Error("logo.svg has a <path> without a d attribute");
+    const fill = /\bfill="([^"]+)"/.exec(attributes)?.[1] ?? INK;
+    return { d, fill: fill.toLowerCase() === INK ? PAPER : fill };
+  });
+  if (paths.length === 0) throw new Error("no paths found in ui/public/logo.svg");
 
-function crc32(buffer) {
-  let crc = ~0;
-  for (const byte of buffer) {
-    crc ^= byte;
-    for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-  }
-  return ~crc >>> 0;
+  // Centre the mark in the tile, then optionally shrink it for the maskable
+  // icon, whose outer ring gets cropped by the platform.
+  const mark = `translate(64 64) scale(${scale}) translate(${-MARK_CENTER.x} ${-MARK_CENTER.y})`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="1024" height="1024">
+  <rect width="128" height="128" rx="${radius}" fill="${TILE}"/>
+  <g transform="${mark}">
+${paths.map(({ d, fill }) => `    <path d="${d}" fill="${fill}"/>`).join("\n")}
+  </g>
+</svg>
+`;
 }
 
-function chunk(type, data) {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([length, body, crc]);
+function tauriIcon(source, output) {
+  execFileSync(
+    "npx",
+    ["tauri", "icon", source, "--output", output],
+    { cwd: join(root, "desktop"), stdio: "inherit" },
+  );
 }
 
-function encodePng(size, pixels) {
-  const raw = Buffer.alloc((size * 4 + 1) * size);
-  for (let y = 0; y < size; y++) {
-    raw[y * (size * 4 + 1)] = 0; // filter: none
-    pixels.subarray(y * size * 4, (y + 1) * size * 4).forEach((value, index) => {
-      raw[y * (size * 4 + 1) + 1 + index] = value;
-    });
-  }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 6; // RGBA
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", ihdr),
-    chunk("IDAT", deflateSync(raw, { level: 9 })),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-
-const targets = [
-  { file: join(outDir, "icon-192.png"), size: 192 },
-  { file: join(outDir, "icon-512.png"), size: 512 },
-  { file: join(outDir, "icon-maskable-512.png"), size: 512 },
-  { file: join(outDir, "icon-1024.png"), size: 1024 },
-];
-
-for (const target of targets) {
-  writeFileSync(target.file, encodePng(target.size, render(target.size)));
-  console.log(`wrote ${target.file.replace(`${root}/`, "")}`);
+function sips(source, size, target) {
+  execFileSync("sips", ["-z", String(size), String(size), source, "--out", target], {
+    stdio: "ignore",
+  });
 }
