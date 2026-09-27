@@ -5,8 +5,8 @@
 //! Artifacts are served to the reader iframe through the `shelf://` scheme with a
 //! strict CSP, so a document can never reach the network from the desktop app.
 
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::Mutex;
 
@@ -106,7 +106,7 @@ async fn shelf_run(args: Vec<String>) -> Result<serde_json::Value, String> {
 async fn shelf_sync(app: AppHandle, on_progress: bool) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let binary = resolve_cli()?;
-        let mut child = Command::new(binary)
+        let mut child = cli_command(&binary)?
             .args(["sync", "--json", "--stream"])
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -268,11 +268,158 @@ fn size_window(app: &AppHandle) {
 
 fn run_cli(args: &[String]) -> Result<Output, String> {
     let binary = resolve_cli()?;
-    Command::new(&binary)
+    let mut command = cli_command(&binary)?;
+    command
         .args(args)
-        .env("SHELF_NONINTERACTIVE", "1")
         .output()
         .map_err(|error| format!("could not run {}: {error}", binary.display()))
+}
+
+/// A `Command` that can run the CLI, however it was installed.
+///
+/// The CLI is installed as `#!/usr/bin/env node`, and macOS gives an app opened
+/// from the Dock a minimal `PATH` with no node on it, so spawning the file
+/// directly fails with `env: node: No such file or directory`. When the shebang
+/// asks for node, run the script through the node that installed it instead.
+fn cli_command(binary: &Path) -> Result<Command, String> {
+    let mut command = match shebang_interpreter(first_line(binary).as_deref()) {
+        Some("node") => match find_node() {
+            Some(node) => {
+                let mut command = Command::new(node);
+                command.arg(binary);
+                command
+            }
+            None => Command::new(binary),
+        },
+        _ => Command::new(binary),
+    };
+    command.env("SHELF_NONINTERACTIVE", "1");
+    if let Some(path) = child_path() {
+        command.env("PATH", path);
+    }
+    Ok(command)
+}
+
+/// The interpreter a script asks for in its shebang, when it names one we know
+/// how to find ourselves. Anything else (`#!/bin/sh`, a real binary, no file)
+/// is left to the system.
+fn shebang_interpreter(first_line: Option<&str>) -> Option<&'static str> {
+    let line = first_line?.trim_start();
+    let rest = line.strip_prefix("#!")?.trim();
+    if rest.is_empty() {
+        return None;
+    }
+    // `#!/usr/bin/env node`, `#!/usr/bin/env -S node --flag`, `#!/usr/local/bin/node`
+    let mut parts = rest.split_whitespace();
+    let program = parts.next()?;
+    let names_node = |token: &str| token == "node" || token.ends_with("/node");
+    if program.ends_with("/env") || program == "env" {
+        let token = parts.find(|token| !token.starts_with('-'))?;
+        return names_node(token).then_some("node");
+    }
+    names_node(program).then_some("node")
+}
+
+/// The first line of a file, or `None` when it is not there or not a script.
+fn first_line(path: &Path) -> Option<String> {
+    let mut file = std::fs::File::open(path).ok()?;
+    let mut buffer = [0u8; 200];
+    let read = file.read(&mut buffer).ok()?;
+    let text = String::from_utf8_lossy(&buffer[..read]);
+    Some(text.lines().next()?.to_string())
+}
+
+/// Finds a node to run the CLI with: an explicit `SHELF_NODE`, then `PATH`, then
+/// the places version managers and Homebrew keep it. This is what makes the app
+/// work when it is opened from the Dock rather than a terminal.
+fn find_node() -> Option<PathBuf> {
+    if let Some(explicit) = std::env::var_os("SHELF_NODE") {
+        let path = PathBuf::from(explicit);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    if let Some(found) = which("node") {
+        return Some(found);
+    }
+
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut candidates = node_version_dirs(&home);
+    for fixed in [
+        format!("{home}/.volta/bin/node"),
+        format!("{home}/.local/share/mise/shims/node"),
+        "/opt/homebrew/bin/node".to_string(),
+        "/usr/local/bin/node".to_string(),
+        "/opt/local/bin/node".to_string(),
+        "/usr/bin/node".to_string(),
+    ] {
+        candidates.push(PathBuf::from(fixed));
+    }
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+/// `~/.nvm/versions/node/v24.13.0/bin/node`, newest version first.
+fn node_version_dirs(home: &str) -> Vec<PathBuf> {
+    let root = PathBuf::from(format!("{home}/.nvm/versions/node"));
+    let Ok(entries) = std::fs::read_dir(&root) else {
+        return Vec::new();
+    };
+    let mut versions: Vec<(Vec<u32>, PathBuf)> = entries
+        .flatten()
+        .map(|entry| (version_key(&entry.file_name().to_string_lossy()), entry.path().join("bin/node")))
+        .collect();
+    // Newest first, so a machine with many node versions picks the current one.
+    versions.sort_by(|a, b| b.0.cmp(&a.0));
+    versions.into_iter().map(|(_, path)| path).collect()
+}
+
+/// `v24.13.0` becomes `[24, 13, 0]`, so versions sort by number and not text.
+fn version_key(name: &str) -> Vec<u32> {
+    name.split(|char: char| !char.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<u32>().ok())
+        .collect()
+}
+
+/// Looks a program up on `PATH` without spawning a shell.
+fn which(program: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|dir| dir.join(program))
+        .find(|candidate| candidate.is_file())
+}
+
+/// The `PATH` the CLI runs with: what the app inherited, plus where node and the
+/// usual unix tools live, so a Dock launch behaves like a terminal launch.
+fn child_path() -> Option<String> {
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).collect())
+        .unwrap_or_default();
+
+    let home = std::env::var("HOME").unwrap_or_default();
+    let mut extra = vec![
+        PathBuf::from(format!("{home}/.local/bin")),
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/usr/bin"),
+        PathBuf::from("/bin"),
+        PathBuf::from("/usr/sbin"),
+        PathBuf::from("/sbin"),
+    ];
+    if let Some(node) = find_node() {
+        if let Some(dir) = node.parent() {
+            extra.insert(0, dir.to_path_buf());
+        }
+    }
+    for dir in extra {
+        if !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+
+    let joined = std::env::join_paths(dirs).ok()?;
+    joined.into_string().ok()
 }
 
 /// Same bytes the reader would get from `shelf read <id>`, themed for the app.
@@ -496,5 +643,78 @@ mod tests {
         assert_eq!(query_param("theme=dark&x=1", "theme"), Some("dark".into()));
         assert_eq!(query_param("x=1&theme=light", "theme"), Some("light".into()));
         assert_eq!(query_param("x=1", "theme"), None);
+    }
+
+    #[test]
+    fn only_node_scripts_are_rerouted() {
+        assert_eq!(shebang_interpreter(Some("#!/usr/bin/env node")), Some("node"));
+        assert_eq!(
+            shebang_interpreter(Some("#!/usr/bin/env -S node --max-old-space-size=4096")),
+            Some("node")
+        );
+        assert_eq!(shebang_interpreter(Some("#!/usr/local/bin/node")), Some("node"));
+        assert_eq!(shebang_interpreter(Some("#!/bin/sh")), None);
+        assert_eq!(shebang_interpreter(Some("#!/usr/bin/env bash")), None);
+        assert_eq!(shebang_interpreter(Some("not a script")), None);
+        assert_eq!(shebang_interpreter(None), None);
+    }
+
+    /// The bug this guards: a Dock launch has no node on `PATH`, so the CLI's
+    /// `#!/usr/bin/env node` shebang fails with "env: node: No such file or
+    /// directory" until the app runs the script through node itself.
+    #[test]
+    fn a_node_cli_runs_without_node_on_the_path() {
+        if find_node().is_none() {
+            eprintln!("no node on this machine, skipping");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("shelf-node-cli-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let script = dir.join("shelf");
+        std::fs::write(&script, "#!/usr/bin/env node\nprocess.stdout.write('ran')\n")
+            .expect("stub cli");
+
+        let output = cli_command(&script)
+            .expect("command")
+            .env("PATH", "/nonexistent")
+            .output()
+            .expect("spawn");
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "ran");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn node_versions_sort_by_number_not_text() {
+        let home = std::env::temp_dir().join(format!("shelf-node-home-{}", std::process::id()));
+        for version in ["v9.0.0", "v18.20.4", "v24.13.0"] {
+            let bin = home.join(".nvm/versions/node").join(version).join("bin");
+            std::fs::create_dir_all(&bin).expect("temp dir");
+            std::fs::write(bin.join("node"), "#!/bin/sh\n").expect("temp node");
+        }
+
+        let found: Vec<String> = node_version_dirs(&home.to_string_lossy())
+            .iter()
+            .filter_map(|path| path.parent()?.parent()?.file_name())
+            .map(|name| name.to_string_lossy().to_string())
+            .collect();
+        assert_eq!(found, vec!["v24.13.0", "v18.20.4", "v9.0.0"]);
+
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn the_cli_keeps_the_app_path_and_adds_the_usual_places() {
+        let path = child_path().expect("child path");
+        for dir in ["/usr/bin", "/bin"] {
+            assert!(path.contains(dir), "{dir} missing from {path}");
+        }
+        if let Some(inherited) = std::env::var_os("PATH") {
+            for dir in std::env::split_paths(&inherited) {
+                let dir = dir.to_string_lossy().to_string();
+                assert!(path.contains(&dir), "{dir} was dropped from {path}");
+            }
+        }
     }
 }

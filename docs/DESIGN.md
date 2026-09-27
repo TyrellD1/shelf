@@ -200,6 +200,15 @@ forgetting a manual resize.
 
 ## 4. Found by dogfooding
 
+- **A GUI launch has almost no `PATH`.** Opening the app from the Dock failed with
+  `env: node: No such file or directory` while the same bundle launched from a terminal worked: the
+  CLI is installed as `#!/usr/bin/env node`, and Rust was spawning that file directly. `cli_command`
+  now reads the shebang and, when it asks for node, builds `node <cli>` itself, finding node via
+  `SHELF_NODE`, then `PATH`, then the version-manager and Homebrew locations (newest nvm version
+  first, compared as numbers so `v9` cannot outrank `v24`). The child also gets a `PATH` with those
+  directories plus the usual unix ones, so a Dock launch behaves like a terminal launch for whatever
+  the CLI shells out to later (`open`, for `shelf reveal`). A Rust test spawns a node-shebang script
+  with `PATH=/nonexistent`, so this cannot come back unnoticed.
 - **Better Auth's API-key plugin rate-limits to 10 requests per day per key by default**, which
   is nothing for a client that pushes every file it writes: the CLI started returning 401 part-way
   through a normal day. `rateLimit: { enabled: false }` in `web/src/auth.ts` is the fix; for a
