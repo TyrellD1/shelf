@@ -195,6 +195,23 @@ expect_match "no second copy of that path was written" '"total": 1' \
 expect_match "sync finishes after a rebuild" '"ok": true' shelf "$A" sync --json --push-only
 expect_match "a second sync has nothing left to push" '"pushed": 0' shelf "$A" sync --json --push-only
 
+step "machine rename"
+printf '<!doctype html><title>Rename</title><p>still here after rename</p>' > "$TMP/rename-me.html"
+expect_match "a file to rename" '"action": "created"' shelf "$A" write "$TMP/rename-me.html" --json
+RENAMED="renamed-a-$$"
+expect_match "rename re-files this machine's files" '"renamed": [1-9]' \
+  shelf "$A" machine rename "$RENAMED" --json
+expect_match "the bytes moved with the index" 'still here after rename' shelf "$A" read rename-me.html
+expect_match "the new machine id is the configured one" "\"machineId\": \"$RENAMED\"" \
+  shelf "$A" status --json
+if [ -d "$A/html/$MACHINE_A" ]; then
+  bad "the old machine folder should be gone"
+else
+  ok "the empty old machine folder was cleaned up"
+fi
+check_json "the renamed files push as new ids" 'd["pushed"] >= 1' shelf "$A" sync --json
+check_json "a second sync has nothing left" 'd["pushed"] == 0' shelf "$A" sync --json --push-only
+
 step "result"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
 cat <<'NOTE'

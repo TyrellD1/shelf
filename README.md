@@ -87,6 +87,7 @@ shelf status
 | `shelf sync [--pull-only\|--push-only]` | Push local writes, pull other machines |
 | `shelf status [--check]` | Config, counts, pending pushes, last sync |
 | `shelf machine [set <id>]` | Show or change this machine's id |
+| `shelf machine rename <id>` / `<from> <to>` | Move this machine's files (or another's) onto a new id, then push them |
 | `shelf logout` / `shelf upgrade [--check]` | Drop the local token / update the CLI |
 
 Global: `--json`, `--stream`, `--version`, `--help`. Local data lives in `~/.shelf`

@@ -22,7 +22,7 @@ usage
   shelf read <id|path> [--meta]                print a file (or its metadata)
   shelf sync [--pull-only|--push-only]         push local writes, pull other machines
   shelf status [--check]                       config, counts, sync state
-  shelf machine [set <id>]                     show or change this machine's id
+  shelf machine [set <id>|rename <id>|<from> <to>] show, relabel or rename this machine
   shelf logout                                 drop the local token
   shelf upgrade [--check]                      update to the latest release
 

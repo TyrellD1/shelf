@@ -189,6 +189,23 @@ CLI resolves the entry and hands the shelf's own file to macOS, showing the arti
 was written, with no theme injection and no write. The PWA has nothing to hand over — the document
 is already a blob it owns — so it opens that blob in a tab.
 
+### A machine id is identity, not a label
+`fileId = sha1(machineId + "\0" + path)` means the machine id is half of every file's name, and the
+bytes live under `~/.shelf/html/<machine>/`. So `shelf setup --machine <new>` or `machine set` only
+relabels the config: files already written keep the old id, and because sync only pushes what
+belongs to the machine you are on, they silently stop being pushed. That trap is why `shelf machine
+rename` exists, and why `setup` now warns when it changes an id that has files behind it. A rename
+moves the bytes, recomputes ids, clears `pushedSha` (no server has seen the new ids), and resets the
+pull cursor, which described the old identity. Rows already pushed under the old id stay on the
+server: the API has no delete, so the shelf keeps both and the old machine simply stops appearing
+unless something is still filed under it. Two ids that both have files is normal and supported,
+which is what `<from> <to>` is for.
+
+Renaming also exposed a second bug: `shelf read <path>` and `shelf reveal <path>` resolved a path
+by the first suffix match in index order, so re-keying a file (which re-inserts it) could change
+which document you got. `resolveEntry` in `lib/store.ts` now prefers an exact path, then the
+shortest suffix, so the answer no longer depends on insertion order.
+
 ### Paths are anchored to the git root
 `path_on_machine` is the file's path relative to the repository root when it lives in a repository
 (`cli/src/lib/writer.ts`), falling back to the current directory and then `$HOME`. Writing
@@ -213,6 +230,11 @@ forgetting a manual resize.
 
 ## 4. Found by dogfooding
 
+- **Renaming a machine strands its files.** `shelf setup --machine tyrell-macbook-pro` looked
+  harmless, but the machine id is half of every file id, so the nine documents already on the shelf
+  stayed under `tys-macbook-pro-2` and `shelf sync` reported nothing to push. Fixed with
+  `shelf machine rename` (see the identity section above), plus a warning from `setup` when the id
+  it is about to write does not match the files in the store.
 - **A GUI launch has almost no `PATH`.** Opening the app from the Dock failed with
   `env: node: No such file or directory` while the same bundle launched from a terminal worked: the
   CLI is installed as `#!/usr/bin/env node`, and Rust was spawning that file directly. `cli_command`

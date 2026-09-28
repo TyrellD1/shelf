@@ -1,8 +1,9 @@
 import { flagBool, type ParsedArgs } from "../lib/flags.js";
 import { createApi } from "../lib/api.js";
-import { loadConfig, shelfHome, UserError } from "../lib/config.js";
+import { isValidMachineId } from "@shelf/shared";
+import { loadConfig, saveConfig, shelfHome, UserError } from "../lib/config.js";
 import type { Output } from "../lib/output.js";
-import { loadIndexOrRebuild, machines, pendingPush } from "../lib/store.js";
+import { loadIndexOrRebuild, machines, pendingPush, renameMachine, saveIndex } from "../lib/store.js";
 import { sanitizeHostname } from "./setup.js";
 import { hostname } from "node:os";
 import { shelfBinaryPath } from "../lib/launch.js";
@@ -72,7 +73,6 @@ export async function machineCommand(args: ParsedArgs, output: Output): Promise<
   const value = args.positional[1] ?? args.positional[0];
 
   if (action === "set") {
-    const { isValidMachineId } = await import("@shelf/shared");
     if (!value || !isValidMachineId(value)) {
       throw new UserError(
         `invalid machine id: ${value ?? "(missing)"}`,
@@ -80,9 +80,70 @@ export async function machineCommand(args: ParsedArgs, output: Output): Promise<
         "lowercase letters, digits and dashes",
       );
     }
-    const { saveConfig } = await import("../lib/config.js");
     saveConfig({ ...config, machineId: value });
-    output.emit({ ok: true, machineId: value }, `machine id is now ${value}`);
+    output.emit(
+      { ok: true, machineId: value },
+      `machine id is now ${value}\nFiles already on this device stay where they are; \`shelf machine rename\` moves them.`,
+    );
+    return;
+  }
+
+  if (action === "rename") {
+    // `machine rename <to>` renames this machine; `<from> <to>` adopts another's files.
+    const first = args.positional[1];
+    const second = args.positional[2];
+    const from = second ? first : config.machineId;
+    const to = second ?? first;
+    for (const [label, id] of [
+      ["from", from],
+      ["to", to],
+    ] as const) {
+      if (!id || !isValidMachineId(id)) {
+        throw new UserError(
+          `invalid ${label} machine id: ${id ?? "(missing)"}`,
+          "bad_machine_id",
+          "usage: shelf machine rename <id> | <from> <to> — lowercase letters, digits and dashes",
+        );
+      }
+    }
+
+    const summary = renameMachine(index, from, to);
+    // The pull cursor belonged to the old identity, so it means nothing now.
+    index.lastSyncAt = null;
+    saveIndex(index);
+    if (config.machineId !== to) saveConfig({ ...config, machineId: to });
+
+    for (const file of summary.versioned) {
+      output.warn(`${file.from} already existed on ${to} — kept as ${file.to}`);
+    }
+    for (const file of summary.missing) {
+      output.warn(`${file}: bytes missing from the store, left under ${from}`);
+    }
+
+    const human = summary.renamed
+      ? [
+          `renamed ${summary.renamed} file(s): ${from} → ${to}`,
+          summary.missing.length ? `${summary.missing.length} left behind (no bytes)` : null,
+          "nothing has been pushed yet — run: shelf sync",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : `nothing to rename from ${from}${from === to ? " (that is already this machine)" : ""}`;
+
+    output.emit(
+      {
+        ok: true,
+        from,
+        to,
+        renamed: summary.renamed,
+        versioned: summary.versioned,
+        missing: summary.missing,
+        cursorReset: true,
+        machineId: to,
+        machines: machines(index),
+      },
+      human,
+    );
     return;
   }
 

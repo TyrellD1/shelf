@@ -5,12 +5,19 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  rmdirSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
-import { fileId, type MachineSummary, type ShelfFileMeta } from "@shelf/shared";
-import { ensureHome, shelfHome } from "./config.js";
+import {
+  fileId,
+  nextVersionPath,
+  type MachineSummary,
+  type ShelfFileMeta,
+} from "@shelf/shared";
+import { ensureHome, shelfHome, UserError } from "./config.js";
 
 export interface Entry {
   id: string;
@@ -249,4 +256,100 @@ export function pendingPush(index: ShelfIndex, machineId: string): Entry[] {
   return Object.values(index.entries).filter(
     (entry) => entry.machineId === machineId && entry.sha256 !== entry.pushedSha,
   );
+}
+
+export interface RenameSummary {
+  renamed: number;
+  /** Files that already existed under the new machine and were kept as new versions. */
+  versioned: { from: string; to: string }[];
+  /** Entries whose bytes are missing from the store, so they were left alone. */
+  missing: string[];
+}
+
+/**
+ * Moves every entry of one machine id onto another, in the index and on disk.
+ *
+ * A machine id is not just a label: it is half of the file id
+ * (`sha1(machineId + "\0" + path)`) and the folder the bytes live in. Renaming
+ * therefore moves bytes, issues new ids, and clears `pushedSha`, because no
+ * server has seen the new ids yet. Rows already pushed under the old id stay
+ * where they are — the API has no delete, so the shelf keeps both copies.
+ */
+export function renameMachine(index: ShelfIndex, from: string, to: string): RenameSummary {
+  if (from === to) return { renamed: 0, versioned: [], missing: [] };
+
+  const summary: RenameSummary = { renamed: 0, versioned: [], missing: [] };
+  for (const entry of Object.values(index.entries)) {
+    if (entry.machineId !== from) continue;
+
+    const source = htmlPath(from, entry.pathOnMachine);
+    if (!existsSync(source)) {
+      summary.missing.push(entry.pathOnMachine);
+      continue;
+    }
+    const html = readFileSync(source, "utf8");
+
+    let path = entry.pathOnMachine;
+    const target = htmlPath(to, path);
+    if (existsSync(target)) {
+      if (readFileSync(target, "utf8") === html) {
+        // The same bytes are already there, so this copy is redundant.
+        unlinkSync(source);
+      } else {
+        // Different bytes at the same path: keep both, as a new version.
+        path = freePath(index, to, path);
+        summary.versioned.push({ from: entry.pathOnMachine, to: path });
+      }
+    }
+    if (path !== entry.pathOnMachine || !existsSync(htmlPath(to, path))) {
+      const destination = htmlPath(to, path);
+      mkdirSync(dirname(destination), { recursive: true });
+      renameSync(source, destination);
+    }
+
+    delete index.entries[entry.id];
+    const renamed: Entry = {
+      ...entry,
+      id: fileId(to, path),
+      machineId: to,
+      pathOnMachine: path,
+      pushedSha: null,
+    };
+    index.entries[renamed.id] = renamed;
+    summary.renamed += 1;
+  }
+
+  removeEmptyDirs(join(htmlRoot(), from));
+  return summary;
+}
+
+/** `report.html` → `report-v2.html` when both the index and the disk are taken. */
+function freePath(index: ShelfIndex, machineId: string, from: string): string {
+  let candidate = nextVersionPath(from);
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (!entryForPath(index, machineId, candidate) && !existsSync(htmlPath(machineId, candidate))) {
+      return candidate;
+    }
+    candidate = nextVersionPath(candidate);
+  }
+  throw new UserError(`no free version of ${from}`, "no_free_path");
+}
+
+/** Deletes directories that hold nothing, bottom up. Leaves files alone. */
+function removeEmptyDirs(dir: string): boolean {
+  if (!existsSync(dir)) return true;
+  let empty = true;
+  for (const name of readdirSync(dir)) {
+    const child = join(dir, name);
+    if (statSync(child).isDirectory()) {
+      if (!removeEmptyDirs(child)) empty = false;
+    } else {
+      empty = false;
+    }
+  }
+  if (empty) {
+    rmdirSync(dir);
+    return true;
+  }
+  return false;
 }

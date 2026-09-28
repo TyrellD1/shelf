@@ -15,6 +15,7 @@ import { flagBool, flagString, type ParsedArgs } from "../lib/flags.js";
 import { openUrl } from "../lib/launch.js";
 import type { Output } from "../lib/output.js";
 import { ask, isInteractive } from "../lib/prompt.js";
+import { loadIndexOrRebuild } from "../lib/store.js";
 
 interface CallbackResult {
   token: string;
@@ -71,7 +72,21 @@ export async function setupCommand(args: ParsedArgs, output: Output): Promise<vo
   const api = createApi(config.apiUrl, config.token);
   const me = await api.me();
   config.user = { id: me.user.id, email: me.user.email };
+  const previousMachineId = existing?.machineId ?? "";
   config.machineId = await resolveMachineId(args, existing?.machineId, output);
+
+  // A machine id is half of every file id, so changing it only relabels the
+  // config: files written under the old id stay under it until they are moved.
+  if (previousMachineId && previousMachineId !== config.machineId) {
+    const stranded = Object.values(loadIndexOrRebuild().entries).filter(
+      (entry) => entry.machineId === previousMachineId,
+    ).length;
+    if (stranded > 0) {
+      output.warn(
+        `${stranded} file(s) on this device are filed under ${previousMachineId}; move them with: shelf machine rename ${previousMachineId} ${config.machineId}`,
+      );
+    }
+  }
 
   saveConfig(config);
 
