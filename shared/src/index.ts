@@ -6,9 +6,11 @@ export {
   pathError,
   nextVersionPath,
   displayName,
+  sourcePathError,
   MACHINE_ID_RE,
   MAX_HTML_BYTES,
   MAX_PATH_LENGTH,
+  MAX_SOURCE_PATH_LENGTH,
 } from "./paths.js";
 export { machineColor, machineHue } from "./color.js";
 export type { MachineColor } from "./color.js";

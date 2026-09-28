@@ -9,6 +9,15 @@ export interface ShelfFileMeta {
   bytes: number;
   /** sha256 of the stored html; lets a client skip identical content. */
   sha256?: string;
+  /**
+   * Where the file lived on the machine that wrote it, as an absolute path.
+   *
+   * Metadata only: it is never part of the id or the lookup, and it can be
+   * stale or absent (a rebuilt index cannot know it, and the file may have
+   * moved or been deleted since). Useful for showing where a document came
+   * from, and for grouping by directory later.
+   */
+  sourcePath?: string | null;
 }
 
 export interface ShelfFile extends ShelfFileMeta {
@@ -59,6 +68,7 @@ export interface WriteRequestBody {
   path: string;
   html: string;
   replace?: boolean;
+  sourcePath?: string | null;
 }
 
 export type SortKey = "created" | "edited";

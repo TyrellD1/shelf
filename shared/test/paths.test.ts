@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fileId, nextVersionPath, normalizePath, pathError, isValidMachineId } from "../src/paths.js";
+import { fileId, nextVersionPath, normalizePath, pathError, isValidMachineId, sourcePathError } from "../src/paths.js";
 import { sha1Hex } from "../src/hash.js";
 import { machineHue } from "../src/color.js";
 
@@ -64,5 +64,22 @@ describe("isValidMachineId", () => {
     expect(isValidMachineId("Mac Mini")).toBe(false);
     expect(isValidMachineId("-bad")).toBe(false);
     expect(isValidMachineId("a".repeat(64))).toBe(false);
+  });
+});
+
+describe("sourcePathError", () => {
+  it("accepts absolute paths, and nothing at all", () => {
+    expect(sourcePathError(null)).toBeNull();
+    expect(sourcePathError(undefined)).toBeNull();
+    expect(sourcePathError("")).toBeNull();
+    expect(sourcePathError("/Users/t/project/docs/report.html")).toBeNull();
+    expect(sourcePathError("C:\\Users\\t\\report.html")).toBeNull();
+  });
+
+  it("rejects what it cannot trust", () => {
+    expect(sourcePathError("docs/report.html")).toMatch(/absolute/);
+    expect(sourcePathError(42)).toMatch(/string/);
+    expect(sourcePathError("/tmp/a\u0000b")).toMatch(/control/);
+    expect(sourcePathError(`/${"a".repeat(1100)}`)).toMatch(/longer/);
   });
 });
