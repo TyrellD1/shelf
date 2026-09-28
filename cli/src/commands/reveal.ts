@@ -2,7 +2,7 @@ import { flagBool, type ParsedArgs } from "../lib/flags.js";
 import { UserError } from "../lib/config.js";
 import { openPath } from "../lib/launch.js";
 import type { Output } from "../lib/output.js";
-import { entryById, htmlPath, loadIndexOrRebuild, toMeta, type Entry } from "../lib/store.js";
+import { htmlPath, loadIndexOrRebuild, resolveEntry, toMeta } from "../lib/store.js";
 
 /**
  * `shelf reveal <id|path>` — open the shelf's own copy of a file in the default
@@ -22,7 +22,7 @@ export async function revealCommand(args: ParsedArgs, output: Output): Promise<v
     throw new UserError("usage: shelf reveal <id|path> [--print]", "usage", "shelf reveal report.html");
   }
 
-  const entry = resolveEntry(target);
+  const entry = resolveEntry(loadIndexOrRebuild(), target);
   if (!entry) {
     output.emit({ ok: false, error: `not found: ${target}`, code: "not_found" }, "");
     process.exitCode = 1;
@@ -49,18 +49,5 @@ export async function revealCommand(args: ParsedArgs, output: Output): Promise<v
       opened: !printOnly,
     },
     printOnly ? path : `opened the shelf's copy of ${entry.pathOnMachine} in your browser`,
-  );
-}
-
-/** Same lookup rules as `shelf read`: a file id, or a path (or path suffix). */
-function resolveEntry(target: string): Entry | undefined {
-  const index = loadIndexOrRebuild();
-  const byId = entryById(index, target);
-  if (byId) return byId;
-
-  const wanted = target.replace(/^\.\//, "");
-  return Object.values(index.entries).find(
-    (candidate) =>
-      candidate.pathOnMachine === wanted || candidate.pathOnMachine.endsWith(`/${wanted}`),
   );
 }

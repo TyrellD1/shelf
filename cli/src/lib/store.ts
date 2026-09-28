@@ -152,6 +152,30 @@ export function entryById(index: ShelfIndex, id: string): Entry | undefined {
   return index.entries[id];
 }
 
+/**
+ * Finds an entry from a file id or a path.
+ *
+ * A path matches exactly first, then by suffix, and among several suffixes the
+ * shortest wins. Without that ordering the answer depends on the order entries
+ * happen to sit in the index, which changes when a file is renamed or re-keyed.
+ */
+export function resolveEntry(index: ShelfIndex, target: string): Entry | undefined {
+  const byId = index.entries[target];
+  if (byId) return byId;
+
+  const wanted = target.replace(/^\.\//, "");
+  const matches = Object.values(index.entries).filter(
+    (entry) => entry.pathOnMachine === wanted || entry.pathOnMachine.endsWith(`/${wanted}`),
+  );
+  const exact = matches.find((entry) => entry.pathOnMachine === wanted);
+  if (exact) return exact;
+  return matches.sort(
+    (a, b) =>
+      a.pathOnMachine.length - b.pathOnMachine.length ||
+      a.pathOnMachine.localeCompare(b.pathOnMachine),
+  )[0];
+}
+
 export function toMeta(entry: Entry): ShelfFileMeta {
   return {
     id: entry.id,

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs, flagBool, flagString, flagNumber } from "../src/lib/flags.js";
 import { shelfPathFor, relativeTime } from "../src/lib/writer.js";
-import { emptyIndex, listEntries, machines, pendingPush, type Entry } from "../src/lib/store.js";
+import { emptyIndex, listEntries, machines, pendingPush, resolveEntry, type Entry } from "../src/lib/store.js";
 import { sanitizeHostname } from "../src/commands/setup.js";
 
 describe("parseArgs", () => {
@@ -48,6 +48,50 @@ describe("shelfPathFor", () => {
     expect(shelfPathFor("docs/report.html", repo)).toBe("docs/report.html");
     expect(shelfPathFor("../report.html", sub)).toBe("docs/report.html");
     expect(shelfPathFor(join(repo, "docs", "report.html"), sub)).toBe("docs/report.html");
+  });
+});
+
+describe("resolveEntry", () => {
+  const at = (machineId: string, path: string) => ({
+    id: `${machineId}:${path}`,
+    machineId,
+    pathOnMachine: path,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    editedAt: "2026-01-01T00:00:00.000Z",
+    bytes: 1,
+    sha256: "a".repeat(64),
+    pushedSha: null,
+    fetchedAt: null,
+  });
+
+  it("prefers an exact path over a suffix, whatever the insertion order", () => {
+    const index = emptyIndex();
+    for (const entry of [at("other", "audit/report.html"), at("mac", "report.html")]) {
+      index.entries[entry.id] = entry;
+    }
+    expect(resolveEntry(index, "report.html")?.machineId).toBe("mac");
+    expect(resolveEntry(index, "./report.html")?.machineId).toBe("mac");
+  });
+
+  it("picks the shortest suffix, so re-keying a file cannot change the answer", () => {
+    const index = emptyIndex();
+    for (const entry of [
+      at("mac", "deep/nested/notes.html"),
+      at("mac", "notes.html"),
+      at("other", "docs/notes.html"),
+    ]) {
+      index.entries[entry.id] = entry;
+    }
+    expect(resolveEntry(index, "notes.html")?.pathOnMachine).toBe("notes.html");
+    expect(resolveEntry(index, "docs/notes.html")?.pathOnMachine).toBe("docs/notes.html");
+  });
+
+  it("finds a file by id, and returns nothing for a path it does not have", () => {
+    const index = emptyIndex();
+    const entry = at("mac", "a.html");
+    index.entries[entry.id] = entry;
+    expect(resolveEntry(index, entry.id)).toBe(entry);
+    expect(resolveEntry(index, "missing.html")).toBeUndefined();
   });
 });
 

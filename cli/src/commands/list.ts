@@ -1,6 +1,6 @@
 import { flagBool, flagNumber, flagString, type ParsedArgs } from "../lib/flags.js";
 import type { Output } from "../lib/output.js";
-import { listEntries, loadIndexOrRebuild, machines } from "../lib/store.js";
+import { listEntries, loadIndexOrRebuild, machines, resolveEntry } from "../lib/store.js";
 import { relativeTime } from "../lib/writer.js";
 
 export async function listCommand(args: ParsedArgs, output: Output): Promise<void> {
@@ -42,13 +42,7 @@ export async function readCommand(args: ParsedArgs, output: Output): Promise<voi
   if (!target) throw new Error("usage: shelf read <id|path> [--meta]");
 
   const index = loadIndexOrRebuild();
-  const entry =
-    index.entries[target] ??
-    Object.values(index.entries).find(
-      (candidate) =>
-        candidate.pathOnMachine === target.replace(/^\.\//, "") ||
-        candidate.pathOnMachine.endsWith(`/${target.replace(/^\.\//, "")}`),
-    );
+  const entry = resolveEntry(index, target);
 
   if (!entry) {
     output.emit({ ok: false, error: `not found: ${target}`, code: "not_found" }, "");
