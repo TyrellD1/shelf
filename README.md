@@ -157,29 +157,51 @@ shelf setup --api http://localhost:8787
 
 ## Deploy (Cloudflare Workers + Neon)
 
+You need a Cloudflare account and a Postgres that a Worker can reach. Neon is the
+path we test:
+
 ```bash
-# 1. database
-neonctl projects create --name shelf          # or the Neon dashboard
-npx wrangler hyperdrive create shelf-db --connection-string "<neon pooler url>"
+# 1. database: a project, and its direct (not pooled) connection string
+neon projects create --name shelf --region-id aws-us-east-1   # add --org-id if you have several orgs
+neon connection-string --project-id <project-id>              # pooled is off by default
 
-# 2. paste the printed hyperdrive id into web/wrangler.jsonc
+# 2. Hyperdrive, which does the pooling itself, so give it the direct string
+npx wrangler hyperdrive create shelf-db --connection-string "postgres://..."
+```
 
-# 3. secrets and deploy
+Paste the printed id into the `hyperdrive` block in `web/wrangler.jsonc`, and set
+`APP_URL` there to the origin you will actually serve from. A new Cloudflare
+account has no `workers.dev` name yet: open Workers & Pages once in the dashboard
+to claim one, and the origin becomes `https://<worker>.<name>.workers.dev`.
+
+```bash
+# 3. secrets, then deploy
 cd web
 npx wrangler secret put BETTER_AUTH_SECRET    # openssl rand -base64 32
 npx wrangler secret put ALLOWED_EMAILS        # you@example.com
-npx wrangler secret put DATABASE_URL          # used by the migration + seed scripts
-npx wrangler deploy
+cd ..
+npm run build -w ui                           # `wrangler deploy` uploads ui/dist, it does not build it
+npm run deploy -w web
 ```
 
-Then run the schema and your account once, and point the CLI at it:
+Then run the schema and your account once. Pass the Neon URL inline instead of
+putting it in `web/.dev.vars`, so local development keeps using the local Postgres:
 
 ```bash
-npm run db:migrate && npm run db:seed         # with web/.dev.vars holding the Neon URL
-shelf setup --api https://shelf.<subdomain>.workers.dev
+DATABASE_URL="$(neon connection-string --project-id <project-id>)" npm run db:migrate
+DATABASE_URL="$(neon connection-string --project-id <project-id>)" npm run db:seed
 ```
 
-`APP_URL` in `wrangler.jsonc` must match the deployed origin (cookies and the CLI redirect use it).
+The Worker needs no `DATABASE_URL` secret: Hyperdrive is the binding, and
+database URLs stay out of the Worker's environment.
+
+Last, point a machine at it. This replaces whatever API the CLI was using, so a
+local development setup has to be re-authorized the same way afterwards:
+
+```bash
+shelf setup --api https://shelf.<name>.workers.dev
+shelf sync                                    # the first sync uploads what this machine has
+```
 
 ## Security notes
 
