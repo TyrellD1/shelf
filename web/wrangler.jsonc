@@ -13,16 +13,21 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/cli", "/cli/*", "/login", "/logout"]
   },
-  // Production database: `npx wrangler hyperdrive create shelf-db --connection-string "<neon url>"`
-  // then paste the printed id here. Local dev does not need it — put DATABASE_URL in .dev.vars.
-  // "hyperdrive": [
-  //   {
-  //     "binding": "HYPERDRIVE",
-  //     "id": "<hyperdrive-id>",
-  //     "localConnectionString": "postgres://shelf@127.0.0.1:55432/shelf"
-  //   }
-  // ],
+  // Production database. `npx wrangler hyperdrive create shelf-db --connection-string "<neon direct url>"`
+  // printed this id. Use the direct (non-pooled) Neon URL: Hyperdrive does the pooling,
+  // and Neon advises against running both. `localConnectionString` keeps `wrangler dev`
+  // on the local Postgres, so local work never touches production data.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "b748489d3fe04e898d99c8c72c32c20d",
+      "localConnectionString": "postgres://shelf@127.0.0.1:55432/shelf"
+    }
+  ],
   "vars": {
-    "APP_URL": "http://localhost:8787"
+    // The origin the app is served from. Cookies and the CLI login redirect are built
+    // from it, so it must match the URL people actually open. `.dev.vars` overrides it
+    // to http://localhost:8787 for local work.
+    "APP_URL": "https://shelf.sftwr.workers.dev"
   }
 }
