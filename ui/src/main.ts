@@ -173,9 +173,9 @@ function createApp(
   const readerSep = h("span", { class: "reader-sep", text: "·", attrs: { "aria-hidden": "true" } });
   const readerSubtitle = h("span", { class: "reader-subtitle" });
   const readerChrome: ReaderChrome = {
-    setTitle(title, subtitle) {
+    setTitle(title, subtitle, tooltip) {
       readerTitle.textContent = title;
-      readerTitle.title = title;
+      readerTitle.title = tooltip && tooltip.length > 0 ? tooltip : title;
       readerSubtitle.textContent = subtitle;
       const showSubtitle = subtitle.length > 0;
       readerSubtitle.hidden = !showSubtitle;

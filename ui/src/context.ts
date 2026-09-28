@@ -3,7 +3,7 @@ import type { DataAdapter, StatusInfo } from "./adapter.js";
 
 /** Top-bar controls the reader borrows while a document is open. */
 export interface ReaderChrome {
-  setTitle(title: string, subtitle: string): void;
+  setTitle(title: string, subtitle: string, tooltip?: string): void;
   setActions(actions: { back(): void; external(): void }): void;
   clear(): void;
 }

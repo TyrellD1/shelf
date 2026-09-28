@@ -82,9 +82,13 @@ export function createReaderView(ctx: AppContext, id: string): ReaderView {
     }
     ctx.cacheFile(found);
     file = found;
+    const title = titleOf(found);
     ctx.readerChrome.setTitle(
-      titleOf(found),
+      title,
       `${found.machineId} · ${formatBytes(found.bytes)} · ${relativeTime(found.editedAt)}`,
+      // Where it was written on that machine, when the server or the index
+      // knows. It is a hint, so it only ever shows on hover.
+      found.sourcePath ? `${title}\nOriginal: ${found.sourcePath}` : title,
     );
     source = await ctx.adapter.readerSource(found);
     if (disposed) {
