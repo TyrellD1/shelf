@@ -131,6 +131,8 @@ printf '<!doctype html><title>Smoke</title><h1>hello shelf</h1>' > "$TMP/report.
 expect_match "write pushes" '"pushed": true' shelf "$A" write "$TMP/report.html" --json
 expect_match "list shows the file" 'report.html' shelf "$A" list --json
 expect_match "read returns the html" 'hello shelf' shelf "$A" read report.html
+expect_match "read --meta says where the file came from" '"sourcePath": "' \
+  shelf "$A" read report.html --meta --json
 expect_match "reveal --print resolves the shelf's own copy" "html/$MACHINE_A/.*report.html" \
   shelf "$A" reveal report.html --print
 expect_match "reveal reports a path it does not have" '"code": "not_found"' \
@@ -158,6 +160,8 @@ B_PATH="$(shelf "$A" list --json --search=from-b.html | sed -n 's/.*"path": "\([
 expect_match "A can read B's file by path" 'written on b' shelf "$A" read "$B_PATH"
 B_ID="$(shelf "$A" list --json --search=from-b.html | sed -n 's/.*"id": "\([^"]*\)".*/\1/p' | head -1)"
 expect_match "A can read B's file by id" 'written on b' shelf "$A" read "$B_ID"
+expect_match "B's absolute path came over the wire" '"sourcePath": "/' \
+  shelf "$A" read "$B_ID" --meta --json
 expect_match "A's list shows both machines" "$MACHINE_B" shelf "$A" list --json
 if find "$A/html/$MACHINE_B" -name 'from-b.html' | grep -q .; then
   ok "B's bytes landed in A's local store"
