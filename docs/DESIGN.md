@@ -213,6 +213,19 @@ shortest suffix, so the answer no longer depends on insertion order.
 same shelf path instead of two copies of one document. Outside a repository the old rule applies,
 so nothing changes for loose files.
 
+### The absolute path is metadata, never identity
+Each row also carries `sourcePath`, the absolute path a file was written from. It is tempting to
+make it do work, and it must not. Identity is still `machineId + relative path`, because the
+absolute path says nothing stable: the same document written from two directories yields the same
+shelf path and two different source paths, a file can be moved or deleted afterwards, and a path on
+one machine means nothing on another. So it is a hint that other clients can show, and the only
+things enforced are that it is a plausible absolute path and not enormous (`sourcePathError` in
+`shared/src/paths.ts`). Two consequences worth stating: a rebuilt index cannot know it, since it
+scans bytes and folders, and pulling the row back is what refills it; and it does write your local
+folder layout into Postgres, which is a deliberate trade for being able to ask "where did this come
+from" from the phone. The reader shows it on hover rather than in the bar, because it is longer than
+everything else there and rarely the thing you are looking for.
+
 ### The window sizes itself once per display
 1708x940 preferred, clamped to the monitor work area and centred (`size_window` in `main.rs`). No
 persistence yet: a laptop screen and a 3440-wide monitor both get a sane window, at the cost of

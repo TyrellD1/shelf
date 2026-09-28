@@ -109,6 +109,13 @@ then pulls rows edited after the last cursor from the other machines. Both direc
 idempotent and content-addressed, so a re-run only moves what changed and a local edit is
 never clobbered by an older copy.
 
+**A source path is a hint.** Alongside the shelf path, each row carries `sourcePath`: the absolute
+path the file was written from on the machine that wrote it. It is display metadata for "where did
+this come from", and deliberately not part of the id, the lookup, or any uniqueness rule. It can be
+absent (a rebuilt index, or a row pushed before the column existed), stale, or meaningless on
+another device. Note that it does put your local folder layout in the database, so leave it out if
+you would rather not store that.
+
 **One auth, two clients.** `shelf setup` opens the web app at `/cli`, you authorize the machine,
 and the browser hands a long-lived API key to a loopback listener (`127.0.0.1:<random>`,
 state-checked). The CLI stores the key in `~/.shelf/config.json` and signs every request with
