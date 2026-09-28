@@ -9,6 +9,8 @@ export interface ShelfFilesTable {
   path_on_machine: string;
   html: string;
   sha256: string;
+  /** Absolute path the file was written from, on the writing machine. A hint. */
+  source_path: string | null;
   created_at: Date;
   edited_at: Date;
 }

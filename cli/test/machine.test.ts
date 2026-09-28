@@ -39,6 +39,7 @@ describe("renameMachine", () => {
       sha256: "a".repeat(64),
       pushedSha: "a".repeat(64),
       fetchedAt: null,
+      sourcePath: `/Users/t/project/${path}`,
     };
   }
 
@@ -120,6 +121,7 @@ describe("renameMachine", () => {
       sha256: "b".repeat(64),
       pushedSha: null,
       fetchedAt: null,
+      sourcePath: null,
     };
 
     const summary = renameMachine(index, "old-mac", "new-mac");

@@ -3,6 +3,7 @@ import { sha1Hex } from "./hash.js";
 export const MACHINE_ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 export const MAX_HTML_BYTES = 5 * 1024 * 1024;
 export const MAX_PATH_LENGTH = 512;
+export const MAX_SOURCE_PATH_LENGTH = 1024;
 
 /** Deterministic file id. Same machine + path always yields the same id. */
 export function fileId(machineId: string, pathOnMachine: string): string {
@@ -45,4 +46,24 @@ export function nextVersionPath(path: string): string {
 export function displayName(path: string): string {
   const base = path.split("/").pop() ?? path;
   return base.replace(/\.html?$/i, "");
+}
+
+/**
+ * Validation for `sourcePath`, the absolute path a file was written from.
+ *
+ * It is a hint, so the bar is low: it must be a plausible absolute path and not
+ * something enormous or full of control characters. Nothing depends on it being
+ * right, and `null` is always acceptable.
+ */
+export function sourcePathError(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string") return "sourcePath must be a string or null";
+  if (value.length > MAX_SOURCE_PATH_LENGTH) {
+    return `sourcePath is longer than ${MAX_SOURCE_PATH_LENGTH} characters`;
+  }
+  if (/[\u0000-\u001f]/.test(value)) return "sourcePath contains control characters";
+  if (!value.startsWith("/") && !/^[a-zA-Z]:[\\/]/.test(value)) {
+    return "sourcePath must be an absolute path";
+  }
+  return null;
 }

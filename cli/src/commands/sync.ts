@@ -45,6 +45,7 @@ export async function syncCommand(args: ParsedArgs, output: Output): Promise<voi
           path: entry.pathOnMachine,
           html,
           replace: true,
+          sourcePath: entry.sourcePath,
         });
         entry.pushedSha = sha256(html);
         entry.bytes = Buffer.byteLength(html, "utf8");
@@ -99,6 +100,7 @@ export async function syncCommand(args: ParsedArgs, output: Output): Promise<voi
           sha256: digest,
           pushedSha: digest,
           fetchedAt: new Date().toISOString(),
+          sourcePath: file.sourcePath ?? null,
         };
         pulled += 1;
         bytesIn += file.bytes;

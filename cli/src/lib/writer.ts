@@ -158,6 +158,9 @@ export async function writeToShelf(request: WriteRequest): Promise<WriteOutcome>
     sha256: digest,
     pushedSha: keepingPlace ? (previous?.pushedSha ?? null) : null,
     fetchedAt: previous?.fetchedAt ?? null,
+    // Where this write came from, for other clients to show. `path` above is the
+    // shelf path; this is the file on this machine.
+    sourcePath: absolute,
   };
 
   let written = writeHtmlFile(machineId, path, html);
@@ -172,6 +175,7 @@ export async function writeToShelf(request: WriteRequest): Promise<WriteOutcome>
           path: record.pathOnMachine,
           html,
           replace: true,
+          sourcePath: record.sourcePath,
         });
         record.pushedSha = digest;
         record.editedAt = response.file.editedAt;
@@ -264,6 +268,7 @@ function entryFromMeta(meta: ShelfFileMeta): Entry {
     sha256: meta.sha256 ?? "",
     pushedSha: meta.sha256 ?? "",
     fetchedAt: null,
+    sourcePath: meta.sourcePath ?? null,
   };
 }
 

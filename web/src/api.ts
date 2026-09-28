@@ -6,6 +6,7 @@ import {
   isValidMachineId,
   normalizePath,
   pathError,
+  sourcePathError,
   type ChangesResponse,
   type ErrorResponse,
   type ListResponse,
@@ -31,6 +32,7 @@ interface MetaRow {
   edited_at: Date;
   bytes: number;
   sha256?: string;
+  source_path?: string | null;
 }
 
 /** Row shape `toMeta` accepts: either a metadata selection or a full row. */
@@ -42,6 +44,7 @@ interface MetaInput {
   edited_at: Date | string;
   bytes?: number;
   sha256?: string | null;
+  source_path?: string | null;
   html?: string;
 }
 
@@ -69,6 +72,7 @@ function metaSelect(): SelectExpression<Database, "shelf_files">[] {
     "created_at",
     "edited_at",
     "sha256",
+    "source_path",
     sql<number>`octet_length(html)`.as("bytes"),
   ];
 }
@@ -84,6 +88,7 @@ function toMeta(row: MetaInput) {
     editedAt: toIso(row.edited_at),
     bytes: Number(bytes),
     sha256: row.sha256 ?? "",
+    sourcePath: row.source_path ?? null,
   };
 }
 
@@ -273,12 +278,15 @@ export async function handleApi(
     const filePath = normalizePath(body.path ?? "");
     const id = (body.id ?? "").trim();
     const html = typeof body.html === "string" ? body.html : "";
+    const sourcePath = body.sourcePath ?? null;
 
     if (!isValidMachineId(machineId)) {
       return fail(400, "bad_request", "machineId must be lowercase letters, digits and dashes");
     }
     const badPath = pathError(filePath);
     if (badPath) return fail(400, "bad_request", badPath);
+    const badSource = sourcePathError(sourcePath);
+    if (badSource) return fail(400, "bad_request", badSource);
     if (!html.trim()) return fail(400, "bad_request", "html is empty");
     if (new TextEncoder().encode(html).length > MAX_HTML_BYTES) {
       return fail(413, "too_large", `html is larger than ${MAX_HTML_BYTES} bytes`);
@@ -308,10 +316,18 @@ export async function handleApi(
       if (body.replace) {
         const updated = await db
           .updateTable("shelf_files")
-          .set({ html, sha256: digest, edited_at: new Date() })
+          .set({ html, sha256: digest, edited_at: new Date(), source_path: sourcePath })
           .where("user_id", "=", userId)
           .where("id", "=", id)
-          .returning(["id", "machine_id", "path_on_machine", "created_at", "edited_at", "sha256"])
+          .returning([
+            "id",
+            "machine_id",
+            "path_on_machine",
+            "created_at",
+            "edited_at",
+            "sha256",
+            "source_path",
+          ])
           .executeTakeFirstOrThrow();
         const response: WriteResponse = {
           file: toMeta({ ...updated, html }),
@@ -337,10 +353,19 @@ export async function handleApi(
         path_on_machine: filePath,
         html,
         sha256: digest,
+        source_path: sourcePath,
         created_at: new Date(),
         edited_at: new Date(),
       })
-      .returning(["id", "machine_id", "path_on_machine", "created_at", "edited_at", "sha256"])
+      .returning([
+        "id",
+        "machine_id",
+        "path_on_machine",
+        "created_at",
+        "edited_at",
+        "sha256",
+        "source_path",
+      ])
       .executeTakeFirstOrThrow();
 
     const response: WriteResponse = {
