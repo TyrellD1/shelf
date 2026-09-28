@@ -41,7 +41,9 @@ desktop/src-tauri/  main.rs (commands, shelf:// protocol, deep links)
 ## Workflow
 
 - `npm run typecheck && npm test` before committing; `npm run smoke` for end-to-end changes
-  (it drives the real CLI against a local Worker and Postgres).
+  (it drives the real CLI against a local Worker and Postgres). The Worker's
+  `localConnectionString` needs a password in the URL or `wrangler dev` refuses to start; the local
+  Postgres trusts local connections, so the value there is a placeholder.
 - Tuning the desktop top bar (the traffic lights are a macOS decoration we only nudge):
   `--topbar` and `html.tauri .topbar { padding-left }` in `ui/src/style.css`, and
   `trafficLightPosition` in `desktop/src-tauri/tauri.conf.json`. Both need `npm run desktop:build`.

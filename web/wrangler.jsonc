@@ -21,7 +21,9 @@
     {
       "binding": "HYPERDRIVE",
       "id": "b748489d3fe04e898d99c8c72c32c20d",
-      "localConnectionString": "postgres://shelf@127.0.0.1:55432/shelf"
+      // The local Postgres trusts local connections, so this password is only here because
+      // `wrangler dev` refuses a `localConnectionString` without one (see scripts/dev-db.sh).
+      "localConnectionString": "postgres://shelf:shelf@127.0.0.1:55432/shelf"
     }
   ],
   "vars": {
