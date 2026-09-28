@@ -62,6 +62,7 @@ describe("resolveEntry", () => {
     sha256: "a".repeat(64),
     pushedSha: null,
     fetchedAt: null,
+    sourcePath: null,
   });
 
   it("prefers an exact path over a suffix, whatever the insertion order", () => {
@@ -106,6 +107,7 @@ describe("index helpers", () => {
     sha256: "aa",
     pushedSha: "aa",
     fetchedAt: null,
+    sourcePath: null,
     ...over,
   });
 

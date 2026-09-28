@@ -31,6 +31,12 @@ export interface Entry {
   pushedSha: string | null;
   /** When this device last pulled the file from another machine. */
   fetchedAt: string | null;
+  /**
+   * Absolute path this was written from on this machine. Metadata only: never
+   * part of the id, and lost when the index is rebuilt by scanning the store,
+   * which is why a sync that pulls the row back can restore it.
+   */
+  sourcePath: string | null;
 }
 
 export interface ShelfIndex {
@@ -108,6 +114,9 @@ export function rebuildIndex(): ShelfIndex {
         sha256: sha256(html),
         pushedSha: null,
         fetchedAt: null,
+        // A scan of the bytes cannot know where they were written from; the
+        // server's copy of the row, if there is one, still has it.
+        sourcePath: null,
       };
     });
   }
@@ -191,6 +200,7 @@ export function toMeta(entry: Entry): ShelfFileMeta {
     createdAt: entry.createdAt,
     editedAt: entry.editedAt,
     bytes: entry.bytes,
+    sourcePath: entry.sourcePath ?? null,
   };
 }
 
