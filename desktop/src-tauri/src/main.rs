@@ -230,6 +230,12 @@ fn announce(app: &AppHandle, payload: serde_json::Value) {
         *slot = Some(payload.clone());
     }
     let _ = app.emit("shelf:open", payload);
+    // A link clicked in another app should bring the reader to the front.
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 /// Opens at a comfortable size for the display it lands on, centred.

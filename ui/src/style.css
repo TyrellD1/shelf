@@ -1230,6 +1230,65 @@ mark {
   font-size: 12.5px;
 }
 
+/* --------------------------------------------------------------- handoff */
+
+.handoff {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 24px;
+}
+
+.handoff-card {
+  width: min(360px, 100%);
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  display: grid;
+  gap: 10px;
+}
+
+.handoff h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.handoff p {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.handoff .primary {
+  height: 38px;
+  border: 1px solid var(--strong);
+  border-radius: 8px;
+  background: var(--strong);
+  color: var(--page);
+  cursor: pointer;
+}
+
+.handoff .ghost-button {
+  height: 38px;
+}
+
+.handoff .link-button {
+  justify-self: center;
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.handoff-remember {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
 .toast {
   position: fixed;
   bottom: calc(16px + env(safe-area-inset-bottom));

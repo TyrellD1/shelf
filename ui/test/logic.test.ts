@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ShelfFileMeta } from "@shelf/shared";
 import {
+  appLinkFor,
   dateGroup,
   facets,
   folderOf,
   groupByDate,
   highlightRanges,
+  isDesktopBrowser,
   listSignature,
   versionOf,
   formatBytes,
@@ -169,5 +171,34 @@ describe("listSignature", () => {
     expect(listSignature([file({ bytes: 9 })], "q", now)).not.toBe(a);
     expect(listSignature([file({})], "q2", now)).not.toBe(a);
     expect(listSignature([file({})], "q", now + 3_600_000)).not.toBe(a);
+  });
+});
+
+describe("appLinkFor", () => {
+  it("turns a reader route into the desktop deep link", () => {
+    expect(appLinkFor("#/f/sf_abc123")).toBe("shelf://open?id=sf_abc123");
+    expect(appLinkFor("#/f/sf%20x")).toBe("shelf://open?id=sf%20x");
+  });
+
+  it("has nothing to hand off for the list or a malformed hash", () => {
+    expect(appLinkFor("")).toBeNull();
+    expect(appLinkFor("#/")).toBeNull();
+    expect(appLinkFor("#/f/")).toBeNull();
+    expect(appLinkFor("#/f/%E0%A4%A")).toBeNull();
+    expect(appLinkFor("#/f/a/b")).toBeNull();
+  });
+});
+
+describe("isDesktopBrowser", () => {
+  const mac = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+  it("accepts desktop browsers", () => {
+    expect(isDesktopBrowser(mac, 0)).toBe(true);
+    expect(isDesktopBrowser("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36")).toBe(true);
+  });
+
+  it("rejects phones and iPads posing as Macs", () => {
+    expect(isDesktopBrowser("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148")).toBe(false);
+    expect(isDesktopBrowser("Mozilla/5.0 (Linux; Android 15) Chrome/130.0 Mobile Safari/537.36")).toBe(false);
+    expect(isDesktopBrowser(mac, 5)).toBe(false);
   });
 });

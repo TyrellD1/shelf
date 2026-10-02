@@ -195,3 +195,29 @@ export function listSignature(files: ShelfFileMeta[], extra: string, now: number
     ...files.map((file) => `${file.id}:${file.editedAt}:${file.bytes}:${relativeTime(file.editedAt, now)}:${relativeTime(file.createdAt, now)}`),
   ].join("|");
 }
+
+/**
+ * The desktop deep link for a web reader URL: `#/f/<id>` → `shelf://open?id=<id>`.
+ * Anything else (the list, a bad hash) has nothing to hand off.
+ */
+export function appLinkFor(hash: string): string | null {
+  const match = /^#\/f\/([^/?#]+)$/.exec(hash);
+  if (!match) return null;
+  let id: string;
+  try {
+    id = decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+  return id ? `shelf://open?id=${encodeURIComponent(id)}` : null;
+}
+
+/**
+ * Whether this browser could be on a machine with the desktop app installed.
+ * Phones and tablets cannot, and iPadOS reports itself as a Mac with touch.
+ */
+export function isDesktopBrowser(userAgent: string, maxTouchPoints = 0): boolean {
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(userAgent)) return false;
+  if (/Macintosh/.test(userAgent) && maxTouchPoints > 1) return false;
+  return true;
+}
