@@ -15,6 +15,11 @@ export interface AppContext {
   openReader(id: string): void;
   closeReader(): void;
   openPalette(): void;
+  /**
+   * Bring the shelf up to date: a sync on the desktop, a refetch on the PWA.
+   * `quiet` is for background polls (no busy chip, no toasts).
+   */
+  pull(options?: { quiet?: boolean }): Promise<void>;
   toast(message: string): void;
   cacheFile(file: ShelfFileMeta | ShelfFile): void;
   getCachedFile(id: string): ShelfFileMeta | undefined;

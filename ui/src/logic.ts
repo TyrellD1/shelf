@@ -119,3 +119,79 @@ export function searchFiles(files: ShelfFileMeta[], query: string, limit = 20): 
     .slice(0, limit)
     .map((entry) => entry.file);
 }
+
+/** `report-v3.html` → `{ base: "report", version: 3 }`; unversioned files have no version. */
+export function versionOf(file: ShelfFileMeta): { base: string; version: number | null } {
+  const title = titleOf(file);
+  const match = /^(.*?)-v(\d+)$/i.exec(title);
+  if (!match || !match[1]) return { base: title, version: null };
+  return { base: match[1], version: Number(match[2]) };
+}
+
+/** The folder part of a path, `""` for a file at the root. */
+export function folderOf(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? "" : path.slice(0, slash);
+}
+
+/** Case-insensitive `[start, end)` ranges of `query` in `text`, for highlighting. */
+export function highlightRanges(text: string, query: string): [number, number][] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+  const haystack = text.toLowerCase();
+  const ranges: [number, number][] = [];
+  let from = 0;
+  for (;;) {
+    const found = haystack.indexOf(needle, from);
+    if (found === -1) break;
+    ranges.push([found, found + needle.length]);
+    from = found + needle.length;
+  }
+  return ranges;
+}
+
+/**
+ * Section label for a timestamp: Today, Yesterday, This week, then the month
+ * ("September", or "September 2025" outside the current year). Days are local.
+ */
+export function dateGroup(iso: string, now: number = Date.now()): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "Undated";
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  const days = Math.round((today.getTime() - day.getTime()) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return "This week";
+  const sameYear = date.getFullYear() === today.getFullYear();
+  return date.toLocaleDateString(undefined, sameYear ? { month: "long" } : { month: "long", year: "numeric" });
+}
+
+/** Splits an already sorted list into consecutive date sections. */
+export function groupByDate<T>(
+  items: T[],
+  stamp: (item: T) => string,
+  now: number = Date.now(),
+): { label: string; items: T[] }[] {
+  const groups: { label: string; items: T[] }[] = [];
+  for (const item of items) {
+    const label = dateGroup(stamp(item), now);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(item);
+    else groups.push({ label, items: [item] });
+  }
+  return groups;
+}
+
+/**
+ * Everything a rendered list depends on. Equal signatures mean the DOM would
+ * come out identical, so a background refresh can skip the rebuild.
+ */
+export function listSignature(files: ShelfFileMeta[], extra: string, now: number = Date.now()): string {
+  return [
+    extra,
+    ...files.map((file) => `${file.id}:${file.editedAt}:${file.bytes}:${relativeTime(file.editedAt, now)}:${relativeTime(file.createdAt, now)}`),
+  ].join("|");
+}

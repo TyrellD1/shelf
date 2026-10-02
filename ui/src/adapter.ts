@@ -8,13 +8,18 @@ export interface SyncResult {
   skipped: number;
   errors: string[];
   lastSyncAt: string | null;
+  /** When the sync finished (wall clock), as opposed to the pull cursor. */
+  syncedAt?: string | null;
 }
 
 export interface StatusInfo {
   configured: boolean;
   apiUrl: string | null;
   machineId: string | null;
+  /** The pull cursor: the server timestamp of the newest file pulled. */
   lastSyncAt: string | null;
+  /** When this device last finished a sync. Older CLIs do not report it. */
+  syncedAt?: string | null;
   fileCount: number;
   pending: number;
   user: { id: string; email: string } | null;
@@ -143,8 +148,18 @@ export function createLocalAdapter(): DataAdapter {
       });
     },
 
-    sync(onProgress) {
-      return invoke<SyncResult>("shelf_sync", { onProgress: Boolean(onProgress) });
+    async sync(onProgress) {
+      // Rust forwards each `--stream` progress line as a `shelf-progress` event.
+      let unlisten: (() => void) | undefined;
+      if (onProgress) {
+        const { listen } = await import("@tauri-apps/api/event");
+        unlisten = await listen<string>("shelf-progress", (event) => onProgress(event.payload));
+      }
+      try {
+        return await invoke<SyncResult>("shelf_sync", { onProgress: Boolean(onProgress) });
+      } finally {
+        unlisten?.();
+      }
     },
 
     async readerSource(file) {
