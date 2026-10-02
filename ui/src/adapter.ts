@@ -32,7 +32,8 @@ export interface StatusInfo {
 
 export interface ListOptions {
   q?: string;
-  machine?: string;
+  /** Machine ids to keep; empty or missing means every machine. */
+  machines?: string[];
   limit?: number;
   offset?: number;
   sort?: SortKey;
@@ -125,7 +126,7 @@ export function createLocalAdapter(): DataAdapter {
       const args = ["list", "--json", `--limit=${options.limit ?? 1000}`];
       if (options.offset) args.push(`--offset=${options.offset}`);
       if (options.q) args.push(`--search=${options.q}`);
-      if (options.machine) args.push(`--machine=${options.machine}`);
+      if (options.machines?.length) args.push(`--machine=${options.machines.join(",")}`);
       if (options.sort) args.push(`--sort=${options.sort}`);
       if (options.dir) args.push(`--dir=${options.dir}`);
       return run<ListResponse>(args);
@@ -242,7 +243,7 @@ export function createNetworkAdapter(): DataAdapter {
       params.set("limit", String(options.limit ?? 20));
       if (options.offset) params.set("offset", String(options.offset));
       if (options.q) params.set("q", options.q);
-      if (options.machine) params.set("machine", options.machine);
+      if (options.machines?.length) params.set("machine", options.machines.join(","));
       params.set("sort", options.sort === "edited" ? "edited" : "created");
       params.set("dir", options.dir ?? "desc");
       return api<ListResponse>(`/api/files?${params.toString()}`);
