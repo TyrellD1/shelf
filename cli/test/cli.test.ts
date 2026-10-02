@@ -121,7 +121,9 @@ describe("index helpers", () => {
     const all = listEntries(index, { limit: 10 });
     expect(all.files.map((file) => file.id)).toEqual(["sf_b", "sf_a"]);
     expect(all.total).toBe(2);
-    expect(listEntries(index, { machine: "mac-mini", limit: 10 }).files).toHaveLength(1);
+    expect(listEntries(index, { machines: ["mac-mini"], limit: 10 }).files).toHaveLength(1);
+    expect(listEntries(index, { machines: ["mac-mini", "macbook"], limit: 10 }).total).toBe(2);
+    expect(listEntries(index, { machines: [], limit: 10 }).total).toBe(2);
     expect(listEntries(index, { q: "b.html", limit: 10 }).files[0].id).toBe("sf_b");
   });
 

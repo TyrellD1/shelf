@@ -4,6 +4,7 @@ import {
   MAX_HTML_BYTES,
   fileId,
   isValidMachineId,
+  parseMachineList,
   normalizePath,
   pathError,
   type ChangesResponse,
@@ -216,16 +217,16 @@ export async function handleApi(
     const limit = intParam(url.searchParams.get("limit"), DEFAULT_LIMIT, 1, MAX_LIMIT);
     const offset = intParam(url.searchParams.get("offset"), 0, 0, 100_000);
     const search = url.searchParams.get("q")?.trim();
-    const machine = url.searchParams.get("machine")?.trim();
+    const machineIds = parseMachineList(url.searchParams.get("machine"));
     const withHtml = url.searchParams.get("withHtml") === "1";
     const sort = url.searchParams.get("sort") === "edited" ? "edited_at" : "created_at";
     const dir = url.searchParams.get("dir") === "asc" ? "asc" : "desc";
 
     let base = db.selectFrom("shelf_files").where("user_id", "=", userId);
     let counted = db.selectFrom("shelf_files").where("user_id", "=", userId);
-    if (machine) {
-      base = base.where("machine_id", "=", machine);
-      counted = counted.where("machine_id", "=", machine);
+    if (machineIds.length > 0) {
+      base = base.where("machine_id", "in", machineIds);
+      counted = counted.where("machine_id", "in", machineIds);
     }
     if (search) {
       const needle = `%${search.replace(/[%_\\]/g, "")}%`;

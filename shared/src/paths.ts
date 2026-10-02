@@ -13,6 +13,20 @@ export function isValidMachineId(value: string): boolean {
   return MACHINE_ID_RE.test(value);
 }
 
+/**
+ * The `machine` filter on the wire: one id, or several joined by commas
+ * (`mac-mini,ci-runner`). Machine ids cannot contain commas, so this is
+ * unambiguous. Invalid and repeated ids are dropped; an empty list means "all".
+ */
+export function parseMachineList(value: string | null | undefined): string[] {
+  if (!value) return [];
+  const ids = value
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => isValidMachineId(id));
+  return [...new Set(ids)];
+}
+
 /** Normalize a user supplied path into a stable, relative, posix-style path. */
 export function normalizePath(input: string): string {
   let p = input.trim().replace(/\\/g, "/");

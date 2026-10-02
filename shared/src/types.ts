@@ -67,6 +67,7 @@ export interface ListQuery {
   limit?: number;
   offset?: number;
   q?: string;
+  /** One machine id, or several joined by commas (see `parseMachineList`). */
   machine?: string;
   sort?: SortKey;
   dir?: "asc" | "desc";
