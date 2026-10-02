@@ -35,7 +35,10 @@ export interface Entry {
 
 export interface ShelfIndex {
   version: 1;
+  /** Pull cursor: the server's `edited_at` of the newest file seen. Not a clock. */
   lastSyncAt: string | null;
+  /** Wall-clock time the last sync finished, for "in sync · 2m ago". */
+  syncedAt?: string | null;
   entries: Record<string, Entry>;
 }
 
@@ -58,7 +61,7 @@ export function sha256(text: string): string {
 }
 
 export function emptyIndex(): ShelfIndex {
-  return { version: INDEX_VERSION, lastSyncAt: null, entries: {} };
+  return { version: INDEX_VERSION, lastSyncAt: null, syncedAt: null, entries: {} };
 }
 
 export function loadIndex(): ShelfIndex {
@@ -67,7 +70,12 @@ export function loadIndex(): ShelfIndex {
   try {
     const parsed = JSON.parse(readFileSync(file, "utf8")) as ShelfIndex;
     if (!parsed || typeof parsed !== "object" || !parsed.entries) return emptyIndex();
-    return { version: INDEX_VERSION, lastSyncAt: parsed.lastSyncAt ?? null, entries: parsed.entries };
+    return {
+      version: INDEX_VERSION,
+      lastSyncAt: parsed.lastSyncAt ?? null,
+      syncedAt: parsed.syncedAt ?? null,
+      entries: parsed.entries,
+    };
   } catch {
     return emptyIndex();
   }

@@ -32,6 +32,7 @@ export async function listCommand(args: ParsedArgs, output: Output): Promise<voi
       hasMore,
       machines: machines(index),
       lastSyncAt: index.lastSyncAt,
+      syncedAt: index.syncedAt ?? null,
     },
     human,
   );

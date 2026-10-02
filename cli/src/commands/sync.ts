@@ -113,6 +113,7 @@ export async function syncCommand(args: ParsedArgs, output: Output): Promise<voi
     if (moved) index.lastSyncAt = cursor;
   }
 
+  if (errors.length === 0) index.syncedAt = new Date().toISOString();
   saveIndex(index);
 
   output.emit(
@@ -126,6 +127,7 @@ export async function syncCommand(args: ParsedArgs, output: Output): Promise<voi
       bytesIn,
       bytesOut,
       lastSyncAt: index.lastSyncAt,
+      syncedAt: index.syncedAt ?? null,
       errors,
     },
     `pushed ${pushed} · pulled ${pulled} · skipped ${skipped}${errors.length ? ` · ${errors.length} error(s)` : ""}`,
