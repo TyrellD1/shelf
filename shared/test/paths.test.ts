@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { fileId, nextVersionPath, normalizePath, pathError, isValidMachineId } from "../src/paths.js";
+import {
+  fileId,
+  nextVersionPath,
+  normalizePath,
+  pathError,
+  isValidMachineId,
+  parseMachineList,
+} from "../src/paths.js";
 import { sha1Hex } from "../src/hash.js";
 import { machineHue } from "../src/color.js";
 
@@ -64,5 +71,15 @@ describe("isValidMachineId", () => {
     expect(isValidMachineId("Mac Mini")).toBe(false);
     expect(isValidMachineId("-bad")).toBe(false);
     expect(isValidMachineId("a".repeat(64))).toBe(false);
+  });
+});
+
+describe("parseMachineList", () => {
+  it("splits, trims, validates and dedupes", () => {
+    expect(parseMachineList("mac-mini")).toEqual(["mac-mini"]);
+    expect(parseMachineList(" mac-mini , ci-runner,mac-mini ")).toEqual(["mac-mini", "ci-runner"]);
+    expect(parseMachineList("mac-mini,Bad Id,,")).toEqual(["mac-mini"]);
+    expect(parseMachineList("")).toEqual([]);
+    expect(parseMachineList(null)).toEqual([]);
   });
 });

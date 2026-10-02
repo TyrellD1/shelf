@@ -204,7 +204,8 @@ export function toMeta(entry: Entry): ShelfFileMeta {
 
 export interface ListOptions {
   q?: string;
-  machine?: string;
+  /** Machine ids to keep; empty or missing means every machine. */
+  machines?: string[];
   sort?: "created" | "edited";
   dir?: "asc" | "desc";
   limit?: number;
@@ -217,7 +218,10 @@ export function listEntries(
 ): { files: ShelfFileMeta[]; total: number; hasMore: boolean } {
   const q = options.q?.trim().toLowerCase();
   let entries = Object.values(index.entries);
-  if (options.machine) entries = entries.filter((entry) => entry.machineId === options.machine);
+  if (options.machines?.length) {
+    const keep = new Set(options.machines);
+    entries = entries.filter((entry) => keep.has(entry.machineId));
+  }
   if (q) {
     entries = entries.filter(
       (entry) =>
