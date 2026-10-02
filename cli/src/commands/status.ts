@@ -35,6 +35,7 @@ export async function statusCommand(args: ParsedArgs, output: Output): Promise<v
     localCount: entries.filter((entry) => entry.machineId === machineId).length,
     pending,
     lastSyncAt: index.lastSyncAt,
+    syncedAt: index.syncedAt ?? null,
     machines: machines(index),
     home: shelfHome(),
     cliPath: shelfBinaryPath(),
@@ -51,7 +52,7 @@ export async function statusCommand(args: ParsedArgs, output: Output): Promise<v
     `machine:   ${payload.machineId ?? "not set"}`,
     `files:     ${payload.fileCount} on this device (${payload.localCount} from ${payload.machineId})`,
     `pending:   ${payload.pending} to push`,
-    `last sync: ${payload.lastSyncAt ? new Date(payload.lastSyncAt).toLocaleString() : "never"}`,
+    `last sync: ${payload.syncedAt ? new Date(payload.syncedAt).toLocaleString() : "never"}`,
     ...(payload.machines.length
       ? [
           "machines:",
