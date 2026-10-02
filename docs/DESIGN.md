@@ -249,6 +249,13 @@ forgetting a manual resize.
   through a normal day. `rateLimit: { enabled: false }` in `web/src/auth.ts` is the fix; for a
   single-user tool with one long-lived key per machine, the allowlist is the real guard. Worth
   knowing because the failure looks like a revoked token, not a quota.
+- **"In sync · 3d ago" never moved when you clicked sync.** The chip showed `lastSyncAt`, which is
+  the pull cursor (the server's `edited_at` of the newest file pulled), so a sync that found
+  nothing new left it alone. The index now also keeps `syncedAt`, the wall-clock time the last
+  clean sync finished, and the chip shows that. The cursor keeps its meaning. The same pass found
+  the list dropping the newest search while an older one was in flight (it returned early instead
+  of letting the latest request win), which is why the filters felt erratic. See
+  `docs/plans/home-page-ux.md`.
 - The first real write of a second machine's file proved the local store layout: bytes land in
   `~/.shelf/html/<machine-id>/<path>` and appear in the list without touching the server, which
   is what makes the desktop reader work offline.

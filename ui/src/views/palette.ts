@@ -7,6 +7,7 @@ import type { AppContext } from "../context.js";
 export function openPalette(ctx: AppContext): () => void {
   let items: ShelfFileMeta[] = [];
   let active = 0;
+  let searched = false;
   let debounce: number | undefined;
 
   const input = h("input", {
@@ -49,7 +50,7 @@ export function openPalette(ctx: AppContext): () => void {
         h("div", {
           class: "palette-hint",
           style: { borderTop: "0" },
-          text: input.value.trim() ? "No matches" : "Loading…",
+          text: !searched ? "Loading…" : input.value.trim() ? "No matches" : "The shelf is empty",
         }),
       );
       return;
@@ -102,6 +103,7 @@ export function openPalette(ctx: AppContext): () => void {
     } catch {
       items = [];
     }
+    searched = true;
     render();
   }
 

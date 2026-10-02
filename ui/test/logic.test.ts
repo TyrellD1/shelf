@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { ShelfFileMeta } from "@shelf/shared";
 import {
+  dateGroup,
   facets,
+  folderOf,
+  groupByDate,
+  highlightRanges,
+  listSignature,
+  versionOf,
   formatBytes,
   matches,
   relativeTime,
@@ -106,5 +112,62 @@ describe("searchFiles", () => {
   });
   it("respects the limit", () => {
     expect(searchFiles(files, "o", 1)).toHaveLength(1);
+  });
+});
+
+describe("versionOf", () => {
+  it("splits a version suffix off the title", () => {
+    expect(versionOf(file({ path: "docs/report-v3.html" }))).toEqual({ base: "report", version: 3 });
+    expect(versionOf(file({ path: "docs/report.html" }))).toEqual({ base: "report", version: null });
+    expect(versionOf(file({ path: "-v2.html" }))).toEqual({ base: "-v2", version: null });
+  });
+});
+
+describe("folderOf", () => {
+  it("returns the directory or nothing", () => {
+    expect(folderOf("a/b/c.html")).toBe("a/b");
+    expect(folderOf("c.html")).toBe("");
+  });
+});
+
+describe("highlightRanges", () => {
+  it("finds every case-insensitive match", () => {
+    expect(highlightRanges("Report-report", "REP")).toEqual([
+      [0, 3],
+      [7, 10],
+    ]);
+    expect(highlightRanges("abc", " ")).toEqual([]);
+    expect(highlightRanges("abc", "z")).toEqual([]);
+  });
+});
+
+describe("dateGroup", () => {
+  const now = new Date(2026, 9, 2, 15, 0).getTime();
+  it("labels recent days, then months", () => {
+    expect(dateGroup(new Date(2026, 9, 2, 1).toISOString(), now)).toBe("Today");
+    expect(dateGroup(new Date(2026, 9, 1, 23).toISOString(), now)).toBe("Yesterday");
+    expect(dateGroup(new Date(2026, 8, 28).toISOString(), now)).toBe("This week");
+    expect(dateGroup(new Date(2026, 7, 3).toISOString(), now)).toMatch(/August/);
+    expect(dateGroup(new Date(2025, 7, 3).toISOString(), now)).toMatch(/2025/);
+    expect(dateGroup("nope", now)).toBe("Undated");
+  });
+  it("groups consecutive items", () => {
+    const stamps = [new Date(2026, 9, 2).toISOString(), new Date(2026, 9, 2).toISOString(), new Date(2026, 9, 1).toISOString()];
+    const groups = groupByDate(stamps, (s) => s, now);
+    expect(groups.map((g) => [g.label, g.items.length])).toEqual([
+      ["Today", 2],
+      ["Yesterday", 1],
+    ]);
+  });
+});
+
+describe("listSignature", () => {
+  it("changes when content or displayed time changes", () => {
+    const now = Date.parse("2026-01-01T00:10:00.000Z");
+    const a = listSignature([file({})], "q", now);
+    expect(listSignature([file({})], "q", now)).toBe(a);
+    expect(listSignature([file({ bytes: 9 })], "q", now)).not.toBe(a);
+    expect(listSignature([file({})], "q2", now)).not.toBe(a);
+    expect(listSignature([file({})], "q", now + 3_600_000)).not.toBe(a);
   });
 });

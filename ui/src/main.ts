@@ -24,11 +24,24 @@ function fallbackStatus(error: unknown): StatusInfo {
   };
 }
 
+let toastNode: HTMLElement | null = null;
+let toastTimer: number | undefined;
+
+/** One toast at a time: a new message replaces the last instead of stacking on it. */
 function showToast(message: string): void {
-  const node = h("div", { class: "toast", text: message });
+  toastNode?.remove();
+  window.clearTimeout(toastTimer);
+  const node = h("div", { class: "toast", text: message, attrs: { role: "status" } });
+  toastNode = node;
   document.body.appendChild(node);
-  window.setTimeout(() => node.remove(), 3200);
+  toastTimer = window.setTimeout(() => {
+    node.remove();
+    if (toastNode === node) toastNode = null;
+  }, 3600);
 }
+
+/** How often the home page pulls while it is on screen. */
+const POLL_MS = 10_000;
 
 function themeButton(): HTMLButtonElement {
   const apply = () => {
@@ -75,9 +88,14 @@ function dot(state: "ok" | "busy" | "error"): HTMLElement {
   return h("span", { class: "dot", dataset: { state } });
 }
 
+let currentApp: { stop: () => void } | null = null;
+
 async function boot(): Promise<void> {
   const root = document.getElementById("app");
   if (!root) return;
+  // Signing out (or a lapsed session) boots again; the old app must stop polling.
+  currentApp?.stop();
+  currentApp = null;
 
   const adapter = createAdapter();
   let status: StatusInfo;
@@ -93,12 +111,13 @@ async function boot(): Promise<void> {
       setActions: () => undefined,
       clear: () => undefined,
     };
-    const ctx = contextFor(adapter, () => status, () => undefined, noopChrome);
+    const ctx = contextFor(adapter, () => status, () => undefined, noopChrome, async () => undefined);
     renderLoginInto(root, ctx, () => void boot());
     return;
   }
 
   const app = createApp(adapter, status);
+  currentApp = app;
   mount(root, app.element);
   app.start();
 }
@@ -109,6 +128,7 @@ function contextFor(
   currentStatus: () => StatusInfo,
   refreshChrome: () => void,
   readerChrome: ReaderChrome,
+  pull: AppContext["pull"],
 ): AppContext {
   const cache = new Map<string, ShelfFileMeta>();
   const ctx: AppContext = {
@@ -127,6 +147,7 @@ function contextFor(
       location.hash = "#/";
     },
     openPalette: () => openPalette(ctx),
+    pull,
     toast: showToast,
     cacheFile: (file) => cache.set(file.id, file),
     getCachedFile: (id) => cache.get(id),
@@ -141,10 +162,21 @@ const statusRef: { value: StatusInfo } = { value: fallbackStatus(null) };
 function createApp(
   adapter: DataAdapter,
   initialStatus: StatusInfo,
-): { element: HTMLElement; start: () => void } {
+): { element: HTMLElement; start: () => void; stop: () => void } {
   statusRef.value = initialStatus;
   let syncState: "idle" | "busy" | "error" = "idle";
   let syncNote = "";
+  /** The sync in flight, shared by background polls and the sync button. */
+  let syncing: Promise<void> | null = null;
+  /** Whether someone is watching the sync in flight (button, ⌘R, launch). */
+  let syncLoud = false;
+  /** Fallback for a CLI too old to report `syncedAt`. */
+  let syncedHere: string | null = null;
+  let pollTimer: number | undefined;
+  let tickTimer: number | undefined;
+  let stopped = false;
+  let focusSearchAfterRoute = false;
+  const cleanups: (() => void)[] = [];
   let listView: ListView | null = null;
   let readerView: ReaderView | null = null;
 
@@ -240,7 +272,9 @@ function createApp(
   );
   const element = h("div", { class: "app" }, topbar, viewHost);
 
-  const ctx = contextFor(adapter, () => statusRef.value, () => renderChrome(), readerChrome);
+  const ctx = contextFor(adapter, () => statusRef.value, () => renderChrome(), readerChrome, (options) =>
+    pull(options?.quiet ?? false),
+  );
 
   function renderChrome(): void {
     if (adapter.kind === "local") {
@@ -263,7 +297,10 @@ function createApp(
         syncChip.title = syncNote;
         syncChip.onclick = () => void runSync();
       } else {
-        const when = status.lastSyncAt ? `In sync · ${relativeTime(status.lastSyncAt)}` : "Not synced yet";
+        // `lastSyncAt` is the pull cursor (the newest remote edit), which does not
+        // move when a sync finds nothing new; `syncedAt` is when the sync ran.
+        const syncedAt = status.syncedAt ?? syncedHere;
+        const when = syncedAt ? `In sync · ${relativeTime(syncedAt)}` : "Not synced yet";
         syncChip.dataset.state = "ok";
         syncChip.title = `${status.fileCount} file(s) on this device${status.pending ? `, ${status.pending} to push` : ""}`;
         syncChip.replaceChildren(dot("ok"), document.createTextNode(when));
@@ -278,26 +315,99 @@ function createApp(
     listView?.refreshChrome();
   }
 
-  async function runSync(): Promise<void> {
-    if (adapter.kind !== "local" || !statusRef.value.configured || syncState === "busy") return;
-    syncState = "busy";
-    syncNote = "Syncing…";
-    renderChrome();
+  /**
+   * Runs `shelf sync`. A quiet run (the 10 s poll) leaves the chip alone and
+   * never toasts; a loud one shows progress. Clicking sync while a quiet run is
+   * in flight makes that run loud instead of queueing a second one.
+   */
+  function runSync(quiet = false): Promise<void> {
+    if (adapter.kind !== "local" || !statusRef.value.configured) return Promise.resolve();
+    if (!quiet && !syncLoud) {
+      syncLoud = true;
+      syncState = "busy";
+      syncNote = "Syncing…";
+      renderChrome();
+    }
+    syncing ??= doSync().finally(() => {
+      syncing = null;
+      syncLoud = false;
+    });
+    return syncing;
+  }
+
+  async function doSync(): Promise<void> {
     try {
       const result = await adapter.sync((message) => {
+        if (!syncLoud) return;
         syncNote = message;
         renderChrome();
       });
+      if (result.errors.length === 0) syncedHere = result.syncedAt ?? new Date().toISOString();
       statusRef.value = await adapter.status();
-      await listView?.refresh();
       syncState = result.errors.length > 0 ? "error" : "idle";
       syncNote = result.errors.join("; ");
-      if (result.errors.length > 0) showToast(`Sync finished with problems: ${result.errors.join("; ")}`);
+      if (result.errors.length > 0 && syncLoud) {
+        showToast(`Sync finished with problems: ${result.errors.join("; ")}`);
+      }
+      renderChrome();
+      await listView?.refresh({ quiet: true, markNew: true });
     } catch (error) {
       syncState = "error";
       syncNote = error instanceof Error ? error.message : String(error);
+      renderChrome();
+      if (syncLoud) showToast(`Sync failed: ${syncNote}`);
+      // Whatever is already on this device is still worth showing.
+      await listView?.refresh({ quiet: true });
     }
-    renderChrome();
+  }
+
+  /** Brings the home page up to date from wherever this host gets its data. */
+  async function pull(quiet: boolean): Promise<void> {
+    if (stopped) return;
+    if (adapter.kind === "local") {
+      if (statusRef.value.configured) {
+        await runSync(quiet);
+        return;
+      }
+      statusRef.value = await adapter.status();
+      renderChrome();
+      await listView?.refresh({ quiet: true, markNew: true });
+      return;
+    }
+    try {
+      const next = await adapter.status();
+      if (!next.configured) {
+        // The session lapsed: show the sign-in page rather than an empty list.
+        void boot();
+        return;
+      }
+      statusRef.value = next;
+      renderChrome();
+    } catch {
+      // Offline: the list refresh below reports it.
+    }
+    await listView?.refresh({ quiet, markNew: true });
+  }
+
+  const onHome = () => !stopped && listView !== null && readerView === null;
+
+  /** Polls every POLL_MS while the home page is on screen and the window visible. */
+  function schedulePoll(): void {
+    window.clearTimeout(pollTimer);
+    if (!onHome() || document.hidden) return;
+    pollTimer = window.setTimeout(() => {
+      if (!onHome() || document.hidden) return;
+      void pull(true).finally(schedulePoll);
+    }, POLL_MS);
+  }
+
+  function onVisibility(): void {
+    if (document.hidden) {
+      window.clearTimeout(pollTimer);
+      return;
+    }
+    // Coming back to the window is when stale data is most noticeable.
+    if (onHome()) void pull(true).finally(schedulePoll);
   }
 
   async function runSetup(): Promise<void> {
@@ -318,20 +428,35 @@ function createApp(
     readerView?.destroy();
     readerView = null;
     if (match) {
+      window.clearTimeout(pollTimer);
+      if (listView?.element.isConnected) listView.hidden();
       const reader = createReaderView(ctx, decodeURIComponent(match[1]));
       readerView = reader;
       mount(viewHost, reader.element);
       return;
     }
     listView ??= createListView(ctx);
-    mount(viewHost, listView.element);
-    void listView.refresh();
+    if (!listView.element.isConnected) {
+      mount(viewHost, listView.element);
+      listView.shown();
+    }
+    void listView.refresh({ quiet: true, markNew: true });
+    if (focusSearchAfterRoute) {
+      focusSearchAfterRoute = false;
+      listView.focusSearch();
+    }
+    schedulePoll();
   }
 
   function start(): void {
     renderChrome();
     route();
-    window.addEventListener("hashchange", route);
+    listen(window, "hashchange", route);
+    listen(document, "visibilitychange", onVisibility);
+    // Keeps "In sync · 2m ago" honest between polls (and while reading).
+    tickTimer = window.setInterval(() => {
+      if (syncState === "idle") renderChrome();
+    }, 30_000);
 
     // Follow the system theme when no manual choice is stored, and tell open
     // documents about it.
@@ -341,14 +466,14 @@ function createApp(
       notifyTheme(event.matches ? "dark" : "light");
     });
 
-    window.addEventListener("keydown", (event) => {
+    listen(window, "keydown", (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
       if (mod && (event.key === "k" || event.key === "p")) {
         event.preventDefault();
         ctx.openPalette();
         return;
       }
-      if (mod && event.key === "r" && adapter.kind === "local") {
+      if (mod && event.key === "r" && adapter.kind === "local" && !event.shiftKey) {
         event.preventDefault();
         void runSync();
         return;
@@ -358,8 +483,12 @@ function createApp(
       );
       if (event.key === "/" && !typing) {
         event.preventDefault();
-        if (location.hash !== "#/") ctx.closeReader();
-        listView?.focusSearch();
+        if (readerView) {
+          focusSearchAfterRoute = true;
+          ctx.closeReader();
+        } else {
+          listView?.focusSearch();
+        }
       }
     });
 
@@ -379,7 +508,26 @@ function createApp(
     }
   }
 
-  return { element, start };
+  function listen<K extends string>(
+    target: Window | Document,
+    type: K,
+    handler: (event: never) => void,
+  ): void {
+    const listener = handler as EventListener;
+    target.addEventListener(type, listener);
+    cleanups.push(() => target.removeEventListener(type, listener));
+  }
+
+  function stop(): void {
+    stopped = true;
+    window.clearTimeout(pollTimer);
+    window.clearInterval(tickTimer);
+    for (const cleanup of cleanups.splice(0)) cleanup();
+    readerView?.destroy();
+    readerView = null;
+  }
+
+  return { element, start, stop };
 }
 
 void boot();
