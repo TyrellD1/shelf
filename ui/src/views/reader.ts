@@ -24,7 +24,15 @@ export function createReaderView(ctx: AppContext, id: string): ReaderView {
     },
   });
 
-  const view = h("div", { class: "reader" }, iframe);
+  // The desktop webview paints white while a new document loads. Cover the iframe with the
+  // page colour until 100 ms after it has loaded; the web app does not need this.
+  const LIFT_AFTER_LOAD_MS = 100;
+  const cover = ctx.adapter.kind === "local" ? h("div", { class: "reader-cover" }) : null;
+  if (cover) {
+    iframe.addEventListener("load", () => window.setTimeout(() => cover.remove(), LIFT_AFTER_LOAD_MS));
+  }
+
+  const view = h("div", { class: "reader" }, iframe, ...(cover ? [cover] : []));
   const element = view;
   let source: string | null = null;
   let file: ShelfFileMeta | null = null;
