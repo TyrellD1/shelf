@@ -1,5 +1,6 @@
 import { flagBool, type ParsedArgs } from "../lib/flags.js";
-import { UserError } from "../lib/config.js";
+import { loadConfig, UserError } from "../lib/config.js";
+import { fileUrl } from "@shelf/shared";
 import { openPath } from "../lib/launch.js";
 import type { Output } from "../lib/output.js";
 import { htmlPath, loadIndexOrRebuild, resolveEntry, toMeta } from "../lib/store.js";
@@ -31,6 +32,7 @@ export async function revealCommand(args: ParsedArgs, output: Output): Promise<v
 
   const path = htmlPath(entry.machineId, entry.pathOnMachine);
   const printOnly = flagBool(args, "--print");
+  const config = loadConfig();
 
   if (!printOnly) {
     try {
@@ -46,6 +48,7 @@ export async function revealCommand(args: ParsedArgs, output: Output): Promise<v
       path: entry.pathOnMachine,
       file: toMeta(entry),
       localPath: path,
+      url: config ? fileUrl(config.apiUrl, entry.id) : null,
       opened: !printOnly,
     },
     printOnly ? path : `opened the shelf's copy of ${entry.pathOnMachine} in your browser`,

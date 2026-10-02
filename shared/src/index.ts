@@ -7,6 +7,8 @@ export {
   pathError,
   nextVersionPath,
   displayName,
+  fileRoute,
+  fileUrl,
   MACHINE_ID_RE,
   MAX_HTML_BYTES,
   MAX_PATH_LENGTH,

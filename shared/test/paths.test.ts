@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   fileId,
+  fileUrl,
   nextVersionPath,
   normalizePath,
   pathError,
@@ -81,5 +82,13 @@ describe("parseMachineList", () => {
     expect(parseMachineList("mac-mini,Bad Id,,")).toEqual(["mac-mini"]);
     expect(parseMachineList("")).toEqual([]);
     expect(parseMachineList(null)).toEqual([]);
+  });
+});
+
+describe("fileUrl", () => {
+  it("links to the reader route on the API origin", () => {
+    expect(fileUrl("https://shelf.example.dev/", "mac:docs/a b.html")).toBe(
+      "https://shelf.example.dev/#/f/mac%3Adocs%2Fa%20b.html",
+    );
   });
 });

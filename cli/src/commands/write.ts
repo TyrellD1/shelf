@@ -1,7 +1,8 @@
 import { flagBool, type ParsedArgs } from "../lib/flags.js";
-import { UserError } from "../lib/config.js";
+import { loadConfig, UserError } from "../lib/config.js";
 import type { Output } from "../lib/output.js";
 import { toMeta, writeToShelf } from "../lib/writer.js";
+import { fileUrl } from "@shelf/shared";
 
 export async function writeCommand(args: ParsedArgs, output: Output): Promise<void> {
   const input = args.positional[0];
@@ -26,6 +27,10 @@ export async function writeCommand(args: ParsedArgs, output: Output): Promise<vo
     unchanged: `${outcome.path} is already up to date`,
   }[outcome.action];
 
+  // The link works once the file is pushed; a --no-push write still gets it for later.
+  const config = loadConfig();
+  const url = config ? fileUrl(config.apiUrl, outcome.entry.id) : null;
+
   output.emit(
     {
       ok: true,
@@ -34,8 +39,9 @@ export async function writeCommand(args: ParsedArgs, output: Output): Promise<vo
       requestedPath: outcome.requestedPath,
       file: toMeta(outcome.entry),
       pushed: outcome.pushed,
+      url,
       ...(outcome.warnings.length ? { warnings: outcome.warnings } : {}),
     },
-    `${human}${outcome.pushed ? " · synced" : ""}`,
+    `${human}${outcome.pushed ? " · synced" : ""}${url ? `\n${url}` : ""}`,
   );
 }

@@ -60,3 +60,13 @@ export function displayName(path: string): string {
   const base = path.split("/").pop() ?? path;
   return base.replace(/\.html?$/i, "");
 }
+
+/** Web app route that opens one file in the reader. The UI and the CLI must agree on it. */
+export function fileRoute(id: string): string {
+  return `#/f/${encodeURIComponent(id)}`;
+}
+
+/** Shareable link to a file in the web app, which is served from the API origin. */
+export function fileUrl(apiUrl: string, id: string): string {
+  return `${apiUrl.replace(/\/+$/, "")}/${fileRoute(id)}`;
+}

@@ -79,7 +79,7 @@ shelf status
 | Command | What it does |
 | --- | --- |
 | `shelf setup [--api <url>] [--machine <id>]` | Browser handoff, stores a long-lived API key, sets this machine's id |
-| `shelf write <path> [--replace\|--as-new] [--no-push]` | Write (and push) a file. Existing paths become `-v2`, `-v3`, … |
+| `shelf write <path> [--replace\|--as-new] [--no-push]` | Write (and push) a file and print its web link (`url` in `--json`). Existing paths become `-v2`, `-v3`, … |
 | `shelf open <path> [--browser]` | Write if missing, then open in the desktop app (falls back to the browser) |
 | `shelf list [--search q] [--machine id] [--sort created\|edited] [--limit n]` | The shelf, newest first |
 | `shelf read <id\|path> [--meta]` | Raw HTML on stdout (what the desktop reader uses) |

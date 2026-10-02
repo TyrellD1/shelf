@@ -1,5 +1,5 @@
 import "./style.css";
-import type { ShelfFileMeta } from "@shelf/shared";
+import { fileRoute, type ShelfFileMeta } from "@shelf/shared";
 import { createAdapter, isTauri, type DataAdapter, type StatusInfo } from "./adapter.js";
 import type { AppContext, ReaderChrome } from "./context.js";
 import { ICONS, h, mount, svg } from "./dom.js";
@@ -148,7 +148,7 @@ function contextFor(
       return next;
     },
     openReader: (id) => {
-      location.hash = `#/f/${encodeURIComponent(id)}`;
+      location.hash = fileRoute(id);
     },
     closeReader: () => {
       location.hash = "#/";

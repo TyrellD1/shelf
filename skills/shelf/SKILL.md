@@ -31,8 +31,9 @@ Nothing else is required. Do not chmod, move, or copy the file elsewhere.
   and only pass `--replace` if the user explicitly wants to overwrite the existing version.
 - **Use a relative path** so the shelf shows something readable (`outputs/report.html`, not
   `/var/folders/.../report.html`). Run `shelf write` from the project directory.
-- **Check the result.** `{"ok": true, "path": "...", "pushed": true}` means it is on the shelf
-  and synced. `pushed: false` with a `warnings` entry means it is local but not uploaded yet —
+- **Check the result.** `{"ok": true, "path": "...", "pushed": true, "url": "https://…/#/f/…"}`
+  means it is on the shelf and synced. `url` is the web app link to that file; use it when you
+  need to link the artifact from somewhere else (a ticket, a doc, a message). `pushed: false` with a `warnings` entry means it is local but not uploaded yet —
   say so, and suggest `shelf sync`.
 
 ## Useful reads
@@ -40,7 +41,7 @@ Nothing else is required. Do not chmod, move, or copy the file elsewhere.
 ```bash
 shelf list --json --search <fragment> --limit 20   # what's already there
 shelf read <id|path> --meta --json                 # metadata for one file
-shelf reveal <id|path> --print --json              # where the shelf's copy lives on disk
+shelf reveal <id|path> --print --json              # local copy on disk, plus its web `url`
 shelf status --json                                # api, machine id, pending pushes
 ```
 
