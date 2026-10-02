@@ -11,6 +11,7 @@ import {
   versionOf,
 } from "../logic.js";
 import type { AppContext } from "../context.js";
+import { createMachinePicker } from "./machines.js";
 
 export interface RefreshOptions {
   /** Keep what is on screen while loading and on failure (polls, pulls). */
@@ -22,7 +23,7 @@ export interface RefreshOptions {
 export interface ListView {
   element: HTMLElement;
   refresh(options?: RefreshOptions): Promise<void>;
-  /** Re-render facets from the latest status. */
+  /** Re-render the machine filter from the latest status. */
   refreshChrome(): void;
   focusSearch(): void;
   /** Called after the view is mounted again (restores scroll). */
@@ -67,13 +68,19 @@ function highlighted(text: string, query: string): Node[] {
   return nodes;
 }
 
+/** "mac-mini", "mac-mini and ci-runner", "3 machines". */
+function machinesText(ids: string[]): string {
+  if (ids.length <= 2) return ids.join(" and ");
+  return `${ids.length} machines`;
+}
+
 function isTyping(target: EventTarget | null): boolean {
   const element = target as HTMLElement | null;
   return Boolean(element && (/^(input|textarea|select)$/i.test(element.tagName) || element.isContentEditable));
 }
 
 export function createListView(ctx: AppContext): ListView {
-  const state = { q: "", machine: "", sort: storedSort(), shown: PAGE_SIZE };
+  const state = { q: "", machines: [] as string[], sort: storedSort(), shown: PAGE_SIZE };
   let files: ShelfFileMeta[] = [];
   let total = 0;
   let loaded = false;
@@ -177,10 +184,22 @@ export function createListView(ctx: AppContext): ListView {
     svg(ICONS.refresh, 14),
   );
 
-  const facets = h("div", { class: "facets", attrs: { role: "toolbar", "aria-label": "Machines" } });
-  const facetStrip = h("div", { class: "facet-strip" }, facets);
+  let machineDebounce: number | undefined;
+  const picker = createMachinePicker((selected) => {
+    state.machines = selected;
+    resetPaging();
+    renderSummary();
+    // Ticking three boxes in a row should cost one request, not three.
+    window.clearTimeout(machineDebounce);
+    machineDebounce = window.setTimeout(() => void refresh(), 120);
+  });
   const summaryText = h("div", { class: "summary-text", attrs: { "aria-live": "polite" } });
-  const summary = h("div", { class: "summary" }, summaryText, sortBox);
+  const summary = h(
+    "div",
+    { class: "summary" },
+    summaryText,
+    h("div", { class: "summary-controls" }, picker.element, sortBox),
+  );
 
   const head = h(
     "div",
@@ -189,7 +208,6 @@ export function createListView(ctx: AppContext): ListView {
       "div",
       { class: "list-inner" },
       h("div", { class: "toolbar" }, searchBox, refreshButton),
-      facetStrip,
       summary,
     ),
   );
@@ -234,13 +252,13 @@ export function createListView(ctx: AppContext): ListView {
   async function refresh(options: RefreshOptions = {}): Promise<void> {
     const ticket = ++sequence;
     const sort = SORTS[state.sort];
-    const filterKey = `${state.q}\u0000${state.machine}\u0000${state.sort}`;
+    const filterKey = `${state.q}\u0000${state.machines.join(",")}\u0000${state.sort}`;
     if (!loaded) renderSkeleton();
     else if (!options.quiet) element.dataset.loading = "true";
     try {
       const response = await ctx.adapter.list({
         q: state.q || undefined,
-        machine: state.machine || undefined,
+        machines: state.machines.length ? state.machines : undefined,
         limit: state.shown,
         offset: 0,
         sort: sort.key,
@@ -298,38 +316,9 @@ export function createListView(ctx: AppContext): ListView {
   function renderChrome(): void {
     const status = ctx.status();
     const machines = status?.machines ?? [];
-    // One machine is not a choice; keep the strip for a selection that is still active.
-    facetStrip.hidden = machines.length < 2 && !state.machine;
-    const allCount = machines.reduce((sum, machine) => sum + machine.count, 0);
-    const chip = (machineId: string, label: string, count: number, title: string): HTMLElement => {
-      const pressed = state.machine === machineId;
-      return h(
-        "button",
-        {
-          class: "facet",
-          attrs: { type: "button", "aria-pressed": String(pressed), title },
-          on: {
-            click: () => {
-              state.machine = pressed && machineId ? "" : machineId;
-              resetPaging();
-              renderChrome();
-              void refresh();
-            },
-          },
-        },
-        machineId
-          ? h("span", { class: "swatch", style: { background: machineColor(machineId).swatch } })
-          : null,
-        document.createTextNode(label),
-        h("span", { class: "count", text: String(count) }),
-      );
-    };
-    facets.replaceChildren(
-      chip("", "All", allCount, "Every machine"),
-      ...machines.map((machine) =>
-        chip(machine.machineId, machine.machineId, machine.count, `${machine.count} file(s) from ${machine.machineId}`),
-      ),
-    );
+    // One machine is not a choice; keep the control while a selection is active.
+    picker.element.hidden = machines.length < 2 && state.machines.length === 0;
+    picker.render(machines, state.machines, ctx.adapter.kind === "local" ? (status?.machineId ?? null) : null);
     sortSelect.value = String(state.sort);
     sortLabel.textContent = SORTS[state.sort].label;
   }
@@ -340,11 +329,11 @@ export function createListView(ctx: AppContext): ListView {
       return;
     }
     const parts: Node[] = [];
-    const filtered = Boolean(state.q || state.machine);
+    const filtered = Boolean(state.q || state.machines.length);
     if (filtered) {
       parts.push(document.createTextNode(`${total} ${total === 1 ? "match" : "matches"}`));
       if (state.q) parts.push(document.createTextNode(" for "), h("strong", { text: `“${state.q}”` }));
-      if (state.machine) parts.push(document.createTextNode(" on "), h("strong", { text: state.machine }));
+      // The machine button already names the machines; saying it twice wraps on phones.
       parts.push(
         h("button", {
           class: "link-button",
@@ -367,7 +356,8 @@ export function createListView(ctx: AppContext): ListView {
     searchInput.value = "";
     syncSearchChrome();
     state.q = "";
-    state.machine = "";
+    state.machines = [];
+    picker.close();
     resetPaging();
     renderChrome();
     void refresh();
@@ -521,15 +511,15 @@ export function createListView(ctx: AppContext): ListView {
 
   function emptyState(): HTMLElement {
     const status = ctx.status();
-    if (state.q || state.machine) {
+    if (state.q || state.machines.length) {
       return h(
         "div",
         { class: "empty" },
         h("h2", { text: "No matches" }),
         h("p", {
           text: state.q
-            ? `Nothing on the shelf matches “${state.q}”${state.machine ? ` on ${state.machine}` : ""}.`
-            : `Nothing from ${state.machine} yet.`,
+            ? `Nothing on the shelf matches “${state.q}”${state.machines.length ? ` on ${machinesText(state.machines)}` : ""}.`
+            : `Nothing from ${machinesText(state.machines)} yet.`,
         }),
         h("button", { class: "ghost-button", text: "Clear filters", on: { click: clearFilters } }),
       );

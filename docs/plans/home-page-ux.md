@@ -88,3 +88,27 @@ The work is in four passes: bugs, eyesores, delight, then verification.
 - Scripted checks in Playwright: typing fast lands on the latest query, the sort select, a facet
   toggle, keyboard navigation, polling hitting the API every ~10 s on the list and **not** in the
   reader, and scroll restore after the reader.
+
+## 6. Follow-up: machine multi-select
+
+The facet strip became a single **machine picker** in the summary line, next to sort. It is a
+popover on desktop and a bottom sheet on phones, with:
+
+- "All machines" at the top, which clears the selection.
+- A checkbox per machine with its colour and count. Each toggle applies right away, debounced into
+  one request.
+- An "Only" shortcut on each row.
+- On the desktop, "this device" pinned first.
+- Keyboard support: `↑↓` to move, Space to toggle, Esc to close.
+
+The button reads "All machines", a single machine's name, or "2 machines", and shows filled
+when a filter is on.
+
+**Contract:** `machine` on the wire is now one id **or several joined by commas**. That holds for
+`shelf list --machine a,b` and for `GET /api/files?machine=a,b`, both parsed by
+`parseMachineList` in `shared/`, so the CLI and the Worker share one rule. Machine ids can't
+contain commas, so the format is unambiguous. There's no compatibility shim for older CLIs: both
+devices update together.
+
+Considered and dropped: latest-version-only, date range, and folder filters. The shelf stores
+paths relative to the git root, so the repo, which is usually the product, isn't recorded.
