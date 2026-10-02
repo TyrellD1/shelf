@@ -69,8 +69,19 @@ export function createReaderView(ctx: AppContext, id: string): ReaderView {
   window.addEventListener("keydown", onKey);
 
   void (async () => {
-    const found = ctx.getCachedFile(id) ?? (await ctx.adapter.get(id));
+    // The desktop's `shelf read` exits non-zero for an unknown id; treat that as a miss.
+    const lookup = () => ctx.adapter.get(id).catch(() => null);
+    let found = ctx.getCachedFile(id) ?? (await lookup());
     if (disposed) return;
+    if (!found && ctx.adapter.kind === "local") {
+      // A link from another machine (or the web) can arrive before this one has
+      // pulled the file, so sync once before giving up.
+      ctx.readerChrome.setTitle("Syncing…", "");
+      await ctx.pull({ quiet: true }).catch(() => undefined);
+      if (disposed) return;
+      found = await lookup();
+      if (disposed) return;
+    }
     if (!found) {
       ctx.readerChrome.setTitle("Not on this device", id);
       view.replaceChildren(

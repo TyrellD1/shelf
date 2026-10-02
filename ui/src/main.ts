@@ -9,6 +9,7 @@ import { createListView, type ListView } from "./views/list.js";
 import { createReaderView, type ReaderView } from "./views/reader.js";
 import { openPalette } from "./views/palette.js";
 import { renderLoginInto } from "./views/login.js";
+import { canHandOff, maybeHandOff, openInApp } from "./views/handoff.js";
 
 function fallbackStatus(error: unknown): StatusInfo {
   return {
@@ -89,10 +90,16 @@ function dot(state: "ok" | "busy" | "error"): HTMLElement {
 }
 
 let currentApp: { stop: () => void } | null = null;
+/** A link handed to the desktop app is only offered on the page load that brought it. */
+let handoffChecked = false;
 
 async function boot(): Promise<void> {
   const root = document.getElementById("app");
   if (!root) return;
+  if (!handoffChecked) {
+    handoffChecked = true;
+    if (!isTauri() && maybeHandOff(root, () => void boot())) return;
+  }
   // Signing out (or a lapsed session) boots again; the old app must stop polling.
   currentApp?.stop();
   currentApp = null;
@@ -226,7 +233,20 @@ function createApp(
         ),
         h("span", { class: "reader-heading" }, readerTitle, readerSep, readerSubtitle),
       );
+      const appButton =
+        adapter.kind === "network" && canHandOff()
+          ? h(
+              "button",
+              {
+                class: "icon-button",
+                attrs: { type: "button", title: "Open in the Shelf app", "aria-label": "Open in the Shelf app" },
+                on: { click: () => void openInApp() },
+              },
+              svg(ICONS.app, 14),
+            )
+          : null;
       readerRight.replaceChildren(
+        ...(appButton ? [appButton] : []),
         h(
           "button",
           {

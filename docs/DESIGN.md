@@ -141,6 +141,18 @@ browser and says so (`openedIn: "browser"`). Deep links that arrive before the w
 listening are held in Rust (`shelf_pending_open`), because a cold start delivers the URL during
 `setup()`.
 
+### Web links hand off to the desktop app
+A shelf link pasted into Notion or Slack is the web reader URL (`https://…/#/f/<id>`), and a click
+on it always lands in the browser: only the browser can then launch `shelf://open?id=<id>`. So on
+the first page load of a reader URL in a desktop browser (not inside Tauri, not an installed PWA,
+not a phone), the PWA asks once whether to open it in the app, remembering the answer per browser
+in `localStorage['shelf-open-links']` (`app` | `browser`). With `app` it launches the deep link
+straight away and leaves an "Opened in Shelf" page behind with "Read it here" and "Stop opening
+links in the app". The reader bar's app button launches once and forgets a remembered `browser`.
+File ids are the same everywhere, so the id in the web URL is the id the CLI knows; if the desktop
+has not pulled the file yet, the reader syncs once before saying it is not on this device. The
+fragment never reaches the Worker, which is why this lives in the UI rather than as a redirect.
+
 ### One frontend build, two hosts
 `ui/` builds once; the Worker serves `ui/dist` as its assets and Tauri uses it as `frontendDist`.
 `ui/src/adapter.ts` picks the data source at runtime. No branching elsewhere, which is what keeps
