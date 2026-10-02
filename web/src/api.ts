@@ -229,8 +229,13 @@ export async function handleApi(
     }
     if (search) {
       const needle = `%${search.replace(/[%_\\]/g, "")}%`;
-      base = base.where("path_on_machine", "ilike", needle);
-      counted = counted.where("path_on_machine", "ilike", needle);
+      // Same rule as `shelf list --search`: a path or a machine name matches.
+      base = base.where((eb) =>
+        eb.or([eb("path_on_machine", "ilike", needle), eb("machine_id", "ilike", needle)]),
+      );
+      counted = counted.where((eb) =>
+        eb.or([eb("path_on_machine", "ilike", needle), eb("machine_id", "ilike", needle)]),
+      );
     }
 
     const [rows, totalRow] = await Promise.all([
