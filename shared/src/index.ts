@@ -13,7 +13,7 @@ export {
   MAX_HTML_BYTES,
   MAX_PATH_LENGTH,
 } from "./paths.js";
-export { machineColor, machineHue } from "./color.js";
+export { machineColor, machineHue, machineHues } from "./color.js";
 export type { MachineColor } from "./color.js";
 export type {
   ChangesResponse,
