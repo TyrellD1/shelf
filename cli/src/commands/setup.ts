@@ -41,9 +41,10 @@ export async function setupCommand(args: ParsedArgs, output: Output): Promise<vo
   const clientId = flagString(args, "--client") ?? existing?.clientId ?? randomUUID();
   const label = flagString(args, "--label") ?? defaultLabel();
   const state = randomBytes(16).toString("hex");
+  const askAppendOnly = flagBool(args, "--append-only");
 
   const listener = await startCallbackServer(state);
-  const authUrl = `${apiUrl}/cli?port=${listener.port}&state=${state}&client=${encodeURIComponent(clientId)}&label=${encodeURIComponent(label)}`;
+  const authUrl = `${apiUrl}/cli?port=${listener.port}&state=${state}&client=${encodeURIComponent(clientId)}&label=${encodeURIComponent(label)}${askAppendOnly ? "&scope=append" : ""}`;
 
   output.human(`Authorize this machine in the browser:\n  ${authUrl}\n`);
   output.progress("waiting for browser authorization…");
@@ -72,6 +73,12 @@ export async function setupCommand(args: ParsedArgs, output: Output): Promise<vo
   const api = createApi(config.apiUrl, config.token);
   const me = await api.me();
   config.user = { id: me.user.id, email: me.user.email };
+  // The browser decides the scope (it can override --append-only); the server
+  // reports what the key actually got. Older servers have no scopes: full.
+  config.scope = me.scope === "append" ? "append" : "full";
+  if (askAppendOnly && config.scope !== "append") {
+    output.warn("the browser granted full access instead of append-only");
+  }
   const previousMachineId = existing?.machineId ?? "";
   config.machineId = await resolveMachineId(args, existing?.machineId, output);
 
@@ -96,10 +103,11 @@ export async function setupCommand(args: ParsedArgs, output: Output): Promise<vo
       apiUrl: config.apiUrl,
       user: config.user,
       machineId: config.machineId,
+      scope: config.scope,
       fileCount: me.fileCount,
       machines: me.machines,
     },
-    `Authorized as ${config.user.email}\nMachine id: ${config.machineId}\nWrite something with: shelf write ./report.html`,
+    `Authorized as ${config.user.email}${config.scope === "append" ? " (append only)" : ""}\nMachine id: ${config.machineId}\nWrite something with: shelf write ./report.html`,
   );
 }
 

@@ -51,6 +51,7 @@ shelf status --json                                # api, machine id, pending pu
 | --- | --- |
 | `shelf is not set up on this machine` | Run `shelf setup` once in a terminal (opens a browser). |
 | `the saved token was rejected (401)` | Run `shelf setup` again; it rotates this machine's key. |
+| `… this machine's key is append-only` | This machine can only write. Use `shelf write`; `open`, `--replace`, and pulling are unavailable. Don't retry. |
 | `cannot reach http://…` | The cloud API is unreachable; the file is still local, run `shelf sync` later. |
 | `path must end in .html` | Shelf only stores HTML artifacts. |
 

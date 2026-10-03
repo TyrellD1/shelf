@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { apiKey } from "@better-auth/api-key";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import type { Kysely } from "kysely";
+import { scopeFromPermissions, type KeyScope } from "@shelf/shared";
 import type { Database } from "./db.js";
 import { isAllowedEmail, type AuthEnv } from "./env.js";
 
@@ -74,4 +75,30 @@ function trustedOrigins(appUrl: string): string[] {
     // ignore malformed APP_URL
   }
   return [...origins];
+}
+
+/** The header the api-key plugin reads; also how a request is told apart from a browser. */
+export const API_KEY_HEADER = "x-api-key";
+
+/**
+ * What the request's credential may do. A browser session is `full`; an API key
+ * carries the scope it was minted with. `null` when the key does not verify.
+ */
+export async function credentialScope(auth: Auth, headers: Headers): Promise<KeyScope | null> {
+  const key = headers.get(API_KEY_HEADER);
+  if (!key) return "full";
+  const result = await auth.api.verifyApiKey({ body: { key } }).catch(() => null);
+  if (!result?.valid || !result.key) return null;
+  return scopeFromPermissions(result.key.permissions);
+}
+
+/**
+ * The same headers without an API key, so only a browser cookie can resolve a
+ * session. Used wherever a session can mint or manage keys: a key must never be
+ * able to issue itself a broader one.
+ */
+export function browserOnly(headers: Headers): Headers {
+  const copy = new Headers(headers);
+  copy.delete(API_KEY_HEADER);
+  return copy;
 }

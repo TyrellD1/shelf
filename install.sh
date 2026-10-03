@@ -71,5 +71,7 @@ Next:
   shelf write ./report.html   # write something
   shelf open ./report.html    # open it in the desktop app
 
+Headless box that should only publish? Use: shelf setup --append-only
+
 Agents can read the skill at skills/shelf/SKILL.md.
 NEXT

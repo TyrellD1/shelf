@@ -1,4 +1,4 @@
-import type { ShelfFile, ShelfFileMeta, ListResponse, MeResponse, SortKey } from "@shelf/shared";
+import type { KeyScope, ShelfFile, ShelfFileMeta, ListResponse, MeResponse, SortKey } from "@shelf/shared";
 import { currentTheme, injectTheme } from "./theme.js";
 
 export interface SyncResult {
@@ -27,6 +27,8 @@ export interface StatusInfo {
   cliPath?: string | null;
   cliVersion?: string | null;
   remoteReachable?: boolean;
+  /** The CLI key's scope. Older CLIs do not report it; their keys are full. */
+  scope?: KeyScope;
   error?: string;
 }
 
@@ -145,6 +147,7 @@ export function createLocalAdapter(): DataAdapter {
           machines: status.machines,
           fileCount: status.fileCount,
           appUrl: status.apiUrl ?? "",
+          scope: status.scope ?? "full",
         };
       });
     },

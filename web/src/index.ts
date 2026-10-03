@@ -1,5 +1,5 @@
 import { handleApi } from "./api.js";
-import { createAuth } from "./auth.js";
+import { API_KEY_HEADER, createAuth } from "./auth.js";
 import { handleCliAuth } from "./cli-auth.js";
 import { createDb } from "./db.js";
 import type { Env } from "./env.js";
@@ -16,6 +16,14 @@ export default {
       }
 
       if (path.startsWith("/api/auth")) {
+        // Auth routes (sessions, key management) belong to the browser. An API
+        // key that reached them could mint a broader key than it was given.
+        if (request.headers.has(API_KEY_HEADER)) {
+          return new Response(
+            JSON.stringify({ error: "forbidden", message: "API keys cannot manage auth." }),
+            { status: 403, headers: { "content-type": "application/json; charset=utf-8" } },
+          );
+        }
         return createAuth(env, createDb(env)).handler(request);
       }
 
