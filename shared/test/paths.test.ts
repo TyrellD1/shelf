@@ -9,7 +9,7 @@ import {
   parseMachineList,
 } from "../src/paths.js";
 import { sha1Hex } from "../src/hash.js";
-import { machineHue } from "../src/color.js";
+import { machineColor, machineHue, machineHues } from "../src/color.js";
 
 describe("sha1Hex", () => {
   it("matches known vectors", () => {
@@ -63,6 +63,37 @@ describe("machineHue", () => {
     expect(machineHue("macbook-pro")).toBe(machineHue("macbook-pro"));
     expect(machineHue("macbook-pro")).toBeGreaterThanOrEqual(0);
     expect(machineHue("macbook-pro")).toBeLessThan(360);
+  });
+});
+
+describe("machineHues", () => {
+  it("separates machines whose hashes land side by side", () => {
+    // 299° and 302° by hash: the pair that prompted slot assignment.
+    const hues = machineHues(["tyrell-macbook-pro", "grokbot-box", "cmc-tyrell-macbook-pro"]);
+    const values = [...hues.values()];
+    expect(new Set(values).size).toBe(3);
+    for (const a of values) {
+      for (const b of values) {
+        const gap = Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+        if (a !== b) expect(gap).toBeGreaterThanOrEqual(45);
+      }
+    }
+  });
+
+  it("ignores input order and duplicates", () => {
+    const a = machineHues(["b", "a", "c"]);
+    const b = new Map(machineHues(["c", "a", "b", "a"]));
+    expect(b).toEqual(new Map(a));
+  });
+
+  it("stays distinct past the minimum slot count", () => {
+    const ids = Array.from({ length: 20 }, (_, i) => `machine-${i}`);
+    expect(new Set(machineHues(ids).values()).size).toBe(20);
+  });
+
+  it("falls back to the hash for an unknown machine", () => {
+    expect(machineColor("solo").hue).toBe(machineHue("solo"));
+    expect(machineColor("solo", ["other"]).hue).toBe(machineHue("solo"));
   });
 });
 
