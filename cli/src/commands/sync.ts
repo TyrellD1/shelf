@@ -1,5 +1,5 @@
 import { ApiError, createApi } from "../lib/api.js";
-import { requireConfig, UserError } from "../lib/config.js";
+import { configScope, requireConfig, requireFullScope, UserError } from "../lib/config.js";
 import { flagBool, type ParsedArgs } from "../lib/flags.js";
 import type { Output } from "../lib/output.js";
 import {
@@ -21,6 +21,9 @@ export async function syncCommand(args: ParsedArgs, output: Output): Promise<voi
   const machineId = config.machineId;
   const api = createApi(config.apiUrl, config.token);
   const index = loadIndexOrRebuild();
+  // An append-only key cannot read the shelf, so its sync is push-only.
+  const appendOnly = configScope(config) === "append";
+  if (appendOnly && flagBool(args, "--pull-only")) requireFullScope(config, "pulling");
 
   const errors: string[] = [];
   let pushed = 0;
@@ -65,7 +68,9 @@ export async function syncCommand(args: ParsedArgs, output: Output): Promise<voi
     }
   }
 
-  if (!flagBool(args, "--push-only")) {
+  if (appendOnly) {
+    output.progress("append-only key: skipping the pull");
+  } else if (!flagBool(args, "--push-only")) {
     let cursor = index.lastSyncAt;
     let moved = false;
     for (let page = 0; page < 50; page++) {
@@ -121,6 +126,7 @@ export async function syncCommand(args: ParsedArgs, output: Output): Promise<voi
       ok: true,
       configured: true,
       machineId,
+      scope: configScope(config),
       pushed,
       pulled,
       skipped,

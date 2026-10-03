@@ -1,7 +1,7 @@
 import { flagBool, type ParsedArgs } from "../lib/flags.js";
 import { createApi } from "../lib/api.js";
 import { isValidMachineId } from "@shelf/shared";
-import { loadConfig, saveConfig, shelfHome, UserError } from "../lib/config.js";
+import { configScope, loadConfig, saveConfig, shelfHome, UserError } from "../lib/config.js";
 import type { Output } from "../lib/output.js";
 import { loadIndexOrRebuild, machines, pendingPush, renameMachine, saveIndex } from "../lib/store.js";
 import { sanitizeHostname } from "./setup.js";
@@ -31,6 +31,7 @@ export async function statusCommand(args: ParsedArgs, output: Output): Promise<v
     apiUrl: config?.apiUrl ?? null,
     user: config?.user ?? null,
     machineId: config?.machineId ?? null,
+    scope: config ? configScope(config) : null,
     fileCount: entries.length,
     localCount: entries.filter((entry) => entry.machineId === machineId).length,
     pending,
@@ -49,6 +50,7 @@ export async function statusCommand(args: ParsedArgs, output: Output): Promise<v
     `cli:       ${payload.cliVersion} (${payload.cliPath})`,
     `account:   ${config?.user?.email ?? "not signed in"}`,
     `api:       ${config?.apiUrl ?? "not configured"}`,
+    `access:    ${!config ? "none" : configScope(config) === "append" ? "append only (write, no read)" : "full"}`,
     `machine:   ${payload.machineId ?? "not set"}`,
     `files:     ${payload.fileCount} on this device (${payload.localCount} from ${payload.machineId})`,
     `pending:   ${payload.pending} to push`,

@@ -77,11 +77,14 @@ check_output() {
 }
 
 # Drives the browser half of `shelf setup` over HTTP with the session cookie.
+#   setup_home <home> <machine> [scope chosen in the browser] [extra setup flags…]
 setup_home() {
-  local home="$1" machine="$2"
+  local home="$1" machine="$2" scope="${3:-}"
+  shift 2
+  shift || true
   local log="$TMP/setup-$machine.log"
   SHELF_HOME="$home" SHELF_API_URL="$API_URL" SHELF_NO_BROWSER=1 \
-    node "$CLI" setup --machine "$machine" >"$log" 2>&1 &
+    node "$CLI" setup --machine "$machine" "$@" >"$log" 2>&1 &
   local pid=$!
   for _ in $(seq 1 100); do
     grep -q '/cli?port=' "$log" 2>/dev/null && break
@@ -99,7 +102,7 @@ setup_home() {
   state="$(printf '%s' "$auth_url" | sed -n 's/.*state=\([a-f0-9]*\).*/\1/p')"
   expect_match "authorize page renders ($machine)" 'Authorize' curl -sf -b "$COOKIES" "$auth_url"
   redirect="$(curl -s -o /dev/null -w '%{redirect_url}' -b "$COOKIES" -X POST "$API_URL/cli/authorize" \
-    -H "origin: $API_URL" -d "state=$state&port=$port")"
+    -H "origin: $API_URL" -d "state=$state&port=$port${scope:+&scope=$scope}")"
   case "$redirect" in
     http://127.0.0.1:*) ok "browser hands the token to the loopback listener ($machine)" ;;
     *) bad "unexpected redirect ($machine): $redirect" ;;
@@ -212,11 +215,51 @@ fi
 check_json "the renamed files push as new ids" 'd["pushed"] >= 1' shelf "$A" sync --json
 check_json "a second sync has nothing left" 'd["pushed"] == 0' shelf "$A" sync --json --push-only
 
+step "append-only key"
+C="$TMP/home-c"
+MACHINE_C="smoke-c-$$"
+APPEND_URL_LOG="$TMP/setup-$MACHINE_C.log"
+setup_home "$C" "$MACHINE_C" append --append-only
+check_output "--append-only asks the browser for it" 'scope=append' "$(cat "$APPEND_URL_LOG")"
+expect_match "config remembers the scope" '"scope": "append"' cat "$C/config.json"
+C_KEY="$(sed -n 's/.*"token": "\([^"]*\)".*/\1/p' "$C/config.json")"
+expect_match "/api/me reports the scope" '"scope":"append"' \
+  curl -s -H "x-api-key: $C_KEY" "$API_URL/api/me"
+printf '<!doctype html><title>Append</title><p>append only</p>' > "$TMP/append.html"
+expect_match "an append-only key writes" '"pushed": true' shelf "$C" write "$TMP/append.html" --json
+printf '<!doctype html><title>Append</title><p>append only, again</p>' > "$TMP/append.html"
+expect_match "a rewrite versions instead of overwriting" 'append-v2.html' \
+  shelf "$C" write "$TMP/append.html" --json
+expect_match "--replace is refused locally" '"code":"append_only"' \
+  shelf "$C" write "$TMP/append.html" --replace --json
+C_FIRST="$(shelf "$C" list --json --search=append.html | python3 -c 'import json,sys; f=[x for x in json.load(sys.stdin)["files"] if x["path"].endswith("/append.html")][0]; print(f["id"], f["path"])')"
+C_ID="${C_FIRST%% *}"
+C_PATH="${C_FIRST#* }"
+expect_match "the server refuses an overwrite" '"error":"exists"' \
+  curl -s -H "x-api-key: $C_KEY" -H 'content-type: application/json' -X POST "$API_URL/api/files" \
+  -d "{\"id\":\"$C_ID\",\"machineId\":\"$MACHINE_C\",\"path\":\"$C_PATH\",\"html\":\"<p>overwrite</p>\",\"replace\":true}"
+for route in "/api/files?limit=1" "/api/files/$FILE_ID" "/api/changes" "/api/machines"; do
+  expect_match "append-only cannot GET ${route%%\?*}" '"error":"forbidden_scope"' \
+    curl -s -H "x-api-key: $C_KEY" "$API_URL$route"
+done
+expect_match "append-only cannot reach auth routes" '"error":"forbidden"' \
+  curl -s -H "x-api-key: $C_KEY" "$API_URL/api/auth/api-key/list"
+expect_match "append-only cannot mint a key at /cli" 'Location: .*/login' \
+  curl -s -i -H "x-api-key: $C_KEY" -X POST "$API_URL/cli/authorize" -d "state=$(printf 'a%.0s' $(seq 1 32))&port=40000"
+check_json "sync is push-only" 'd["pulled"] == 0 and d["scope"] == "append"' shelf "$C" sync --json
+expect_match "--pull-only is refused" '"code":"append_only"' shelf "$C" sync --pull-only --json
+expect_match "open is refused (headless)" '"code":"append_only"' shelf "$C" open "$TMP/append.html" --json
+expect_match "status shows append only" 'append only' shelf "$C" status
+expect_match "the full shelf still sees the append-only write" 'append only, again' \
+  curl -sf -b "$COOKIES" "$API_URL/api/files/$(shelf "$C" list --json --search=append-v2 | sed -n 's/.*"id": "\([^"]*\)".*/\1/p' | head -1)"
+expect_match "authorize page offers append only" 'Append only' \
+  curl -sf -b "$COOKIES" "$API_URL/cli?port=40000&state=$(printf 'b%.0s' $(seq 1 32))&scope=append"
+
 step "result"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
 cat <<'NOTE'
 
-note: this run left smoke-a-* / smoke-b-* rows in the dev database.
+note: this run left smoke-a-* / smoke-b-* / smoke-c-* rows in the dev database.
       clear them with:
         bash scripts/dev-db.sh psql -c "delete from shelf_files where machine_id like 'smoke-%';"
 NOTE

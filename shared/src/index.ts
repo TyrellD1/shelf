@@ -13,6 +13,14 @@ export {
   MAX_HTML_BYTES,
   MAX_PATH_LENGTH,
 } from "./paths.js";
+export {
+  appendScopeAllows,
+  KEY_SCOPES,
+  parseScope,
+  SCOPE_PERMISSIONS,
+  scopeFromPermissions,
+} from "./scope.js";
+export type { KeyScope } from "./scope.js";
 export { machineColor, machineHue } from "./color.js";
 export type { MachineColor } from "./color.js";
 export type {

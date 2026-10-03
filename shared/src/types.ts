@@ -1,5 +1,7 @@
 /** Wire types shared by the CLI, the web app, and the desktop app. */
 
+import type { KeyScope } from "./scope.js";
+
 export interface ShelfFileMeta {
   id: string;
   machineId: string;
@@ -26,6 +28,11 @@ export interface MeResponse {
   machines: MachineSummary[];
   fileCount: number;
   appUrl: string;
+  /**
+   * What the calling credential may do. An append-only key gets an empty
+   * `machines` list and a zero `fileCount`: it is not allowed to see the shelf.
+   */
+  scope: KeyScope;
 }
 
 export interface ListResponse {

@@ -1,5 +1,5 @@
 import { flagBool, type ParsedArgs } from "../lib/flags.js";
-import { UserError } from "../lib/config.js";
+import { configScope, loadConfig, UserError } from "../lib/config.js";
 import { deepLink, findAppBundle, openPath, openUrl } from "../lib/launch.js";
 import type { Output } from "../lib/output.js";
 import { htmlPath } from "../lib/store.js";
@@ -13,6 +13,14 @@ export async function openCommand(args: ParsedArgs, output: Output): Promise<voi
   const input = args.positional[0];
   if (!input) {
     throw new UserError("usage: shelf open <path.html>", "usage", "shelf open ./report.html");
+  }
+
+  if (configScope(loadConfig()) === "append") {
+    throw new UserError(
+      "shelf open is not available on an append-only machine",
+      "append_only",
+      "append-only setups are headless: use shelf write, then read it on another device",
+    );
   }
 
   const outcome = await writeToShelf({
