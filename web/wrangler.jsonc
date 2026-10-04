@@ -26,6 +26,9 @@
   // printed this id. Use the direct (non-pooled) Neon URL: Hyperdrive does the pooling,
   // and Neon advises against running both. `localConnectionString` keeps `wrangler dev`
   // on the local Postgres, so local work never touches production data.
+  // Its query cache must stay off (`wrangler hyperdrive update <id> --caching-disabled true`):
+  // with it on, a read made while registering an MCP client is replayed for a minute, and
+  // the authorize step that follows fails with `invalid_target`.
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
