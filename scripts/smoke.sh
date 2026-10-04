@@ -212,12 +212,21 @@ fi
 check_json "the renamed files push as new ids" 'd["pushed"] >= 1' shelf "$A" sync --json
 check_json "a second sync has nothing left" 'd["pushed"] == 0' shelf "$A" sync --json --push-only
 
+step "mcp"
+if node "$ROOT/scripts/smoke-mcp.mjs" "$API_URL" "$EMAIL" "$PASSWORD" "$$"; then
+  ok "claude.ai's OAuth flow and the list / read / write tools"
+else
+  bad "the MCP checks above"
+fi
+check_json "shelf sync pulls what MCP wrote" 'd["pulled"] >= 1' shelf "$A" sync --json --pull-only
+expect_match "and it reads locally" 'three' shelf "$A" read "smoke/mcp-$$.html"
+
 step "result"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
 cat <<'NOTE'
 
-note: this run left smoke-a-* / smoke-b-* rows in the dev database.
+note: this run left smoke-a-* / smoke-b-* and mcp smoke/* rows in the dev database.
       clear them with:
-        bash scripts/dev-db.sh psql -c "delete from shelf_files where machine_id like 'smoke-%';"
+        bash scripts/dev-db.sh psql -c "delete from shelf_files where machine_id like 'smoke-%' or (machine_id = 'mcp' and path_on_machine like 'smoke/%');"
 NOTE
 [ "$FAIL" -eq 0 ]

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   MAX_HTML_BYTES,
+  familyKey,
   fileId,
   nextVersionPath,
   normalizePath,
@@ -224,12 +225,6 @@ export async function writeToShelf(request: WriteRequest): Promise<WriteOutcome>
 }
 
 /** `a/report-v3.html` and `a/report.html` share a family key. */
-export function familyKey(path: string): string {
-  const dot = path.lastIndexOf(".");
-  if (dot <= 0) return path;
-  return `${path.slice(0, dot).replace(/-v\d+$/, "")}${path.slice(dot)}`;
-}
-
 /** Walks -v2, -v3, … until neither the local index nor the server has the path. */
 async function firstFreePath(
   index: ShelfIndex,

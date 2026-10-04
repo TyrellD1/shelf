@@ -6,6 +6,7 @@ export {
   normalizePath,
   pathError,
   nextVersionPath,
+  familyKey,
   displayName,
   fileRoute,
   fileUrl,
@@ -13,6 +14,7 @@ export {
   MAX_HTML_BYTES,
   MAX_PATH_LENGTH,
 } from "./paths.js";
+export { COMMANDS, SHELF_TAGLINE } from "./commands.js";
 export { machineColor, machineHue, machineHues } from "./color.js";
 export type { MachineColor } from "./color.js";
 export type {

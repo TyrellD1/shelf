@@ -56,6 +56,13 @@ export function nextVersionPath(path: string): string {
   return `${path.slice(0, dot)}-v2${path.slice(dot)}`;
 }
 
+/** A path's version family: `report-v3.html` and `report.html` share `report.html`. */
+export function familyKey(path: string): string {
+  const dot = path.lastIndexOf(".");
+  if (dot <= 0) return path;
+  return `${path.slice(0, dot).replace(/-v\d+$/, "")}${path.slice(dot)}`;
+}
+
 export function displayName(path: string): string {
   const base = path.split("/").pop() ?? path;
   return base.replace(/\.html?$/i, "");

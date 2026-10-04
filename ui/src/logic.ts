@@ -221,3 +221,13 @@ export function isDesktopBrowser(userAgent: string, maxTouchPoints = 0): boolean
   if (/Macintosh/.test(userAgent) && maxTouchPoints > 1) return false;
   return true;
 }
+
+/**
+ * The `?next=` a sign-in should return to, if it is a path on this origin.
+ * Anything else (another host, `//host`, `javascript:`) is dropped.
+ */
+export function safeNext(search: string): string | null {
+  const next = new URLSearchParams(search).get("next");
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return null;
+  return next;
+}
