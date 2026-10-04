@@ -5,7 +5,9 @@
 `shelf` is a local-first store for HTML written by agents, with three surfaces that must never
 disagree: the CLI (`cli/`), the desktop app (`desktop/`, Tauri v2), and the PWA/web app
 (`web/` + `ui/`). The CLI owns the local store and is the only writer; the desktop app shells
-out to it; the PWA reads the same data over HTTP.
+out to it; the PWA reads the same data over HTTP. The Worker also serves an MCP endpoint for
+claude.ai (`web/src/mcp.ts`) whose tools mirror the CLI's `list` / `read` / `write`; what it
+writes lands under the machine `mcp` and reaches `~/.shelf` through `shelf sync`.
 
 ## Rules that keep it coherent
 
@@ -33,7 +35,8 @@ cli/src/lib/        config, store (index + bytes), api client, writer core, laun
 shared/src/         types, paths (versioning, validation), hash (file ids), color (machine hue)
 ui/src/             adapter (local|network), views (list, reader, palette, login), logic
 ui/src/logic.ts     pure list/search helpers — add tests here, not in views
-web/src/            index (routing), auth (Better Auth), api (REST), cli-auth (browser handoff)
+web/src/            index (routing), auth (Better Auth + OAuth for MCP), api (REST), files (queries
+                    shared by REST and MCP), mcp (tools), oauth-pages (login/consent), cli-auth
 web/scripts/        migrate, seed, env
 desktop/src-tauri/  main.rs (commands, shelf:// protocol, deep links)
 ```
@@ -53,6 +56,9 @@ desktop/src-tauri/  main.rs (commands, shelf:// protocol, deep links)
   for a control's band. The lights' centre lands at `trafficLightPosition.y - 2.25` CSS px, so on a
   44 px bar `y: 24` puts them on the centre line. A locked screen makes `screencapture -l` return a
   blank frame, so unlock before trusting a capture.
+- MCP tool descriptions stay one line, built from `COMMANDS` in `shared/src/commands.ts` (the CLI
+  help uses the same words). Put detail in parameter descriptions and error hints, not prose.
+  `node scripts/smoke-mcp.mjs` (run by `npm run smoke`) plays claude.ai's OAuth flow end to end.
 - Schema changes go in `web/migrations/*.sql` with `if not exists` / `add column if not exists`
   so `npm run db:migrate` stays idempotent. Better Auth's own tables are created by that script.
 - The CLI ships as one bundled file (`cli/build.mjs`) with no runtime dependencies beyond Node

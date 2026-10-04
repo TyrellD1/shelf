@@ -1,3 +1,4 @@
+import { COMMANDS, SHELF_TAGLINE } from "@shelf/shared";
 import { readCommand, listCommand } from "./commands/list.js";
 import { openCommand } from "./commands/open.js";
 import { revealCommand } from "./commands/reveal.js";
@@ -11,15 +12,16 @@ import { flagBool, parseArgs } from "./lib/flags.js";
 import { createOutput, fail, type Output } from "./lib/output.js";
 import { VERSION } from "./lib/version.js";
 
-const HELP = `shelf ${VERSION} — a local-first shelf for HTML written by agents
+const HELP = `shelf ${VERSION} — ${SHELF_TAGLINE}
 
 usage
   shelf setup [--api <url>] [--machine <id>]   authorize this machine in the browser
-  shelf write <path.html> [--replace|--as-new] write (and push) a file
+  shelf write <path.html> [--replace|--as-new] ${COMMANDS.write}
   shelf open <path.html> [--browser]           write if needed, then open in the app
   shelf reveal <id|path> [--print]             open the shelf's copy in your browser
   shelf list [--search <q>] [--machine <id>] [--limit n] [--sort created|edited]
-  shelf read <id|path> [--meta]                print a file (or its metadata)
+                                               ${COMMANDS.list}
+  shelf read <id|path> [--meta]                ${COMMANDS.read}
   shelf sync [--pull-only|--push-only]         push local writes, pull other machines
   shelf status [--check]                       config, counts, sync state
   shelf machine [set <id>|rename <id>|<from> <to>] show, relabel or rename this machine

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { COMMANDS } from "../src/commands.js";
 import {
+  familyKey,
   fileId,
   fileUrl,
   nextVersionPath,
@@ -121,5 +123,23 @@ describe("fileUrl", () => {
     expect(fileUrl("https://shelf.example.dev/", "mac:docs/a b.html")).toBe(
       "https://shelf.example.dev/#/f/mac%3Adocs%2Fa%20b.html",
     );
+  });
+});
+
+describe("familyKey", () => {
+  it("groups a path with its versions", () => {
+    expect(familyKey("reports/q3.html")).toBe("reports/q3.html");
+    expect(familyKey("reports/q3-v2.html")).toBe("reports/q3.html");
+    expect(familyKey("reports/q3-v12.htm")).toBe("reports/q3.htm");
+    expect(familyKey(nextVersionPath(nextVersionPath("a.html")))).toBe("a.html");
+  });
+});
+
+describe("COMMANDS", () => {
+  it("keeps every summary to one short line", () => {
+    for (const summary of Object.values(COMMANDS)) {
+      expect(summary).not.toContain("\n");
+      expect(summary.length).toBeLessThanOrEqual(40);
+    }
   });
 });

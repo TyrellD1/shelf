@@ -13,6 +13,7 @@ import {
   formatBytes,
   matches,
   relativeTime,
+  safeNext,
   searchFiles,
   sortFiles,
   titleOf,
@@ -200,5 +201,21 @@ describe("isDesktopBrowser", () => {
     expect(isDesktopBrowser("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148")).toBe(false);
     expect(isDesktopBrowser("Mozilla/5.0 (Linux; Android 15) Chrome/130.0 Mobile Safari/537.36")).toBe(false);
     expect(isDesktopBrowser(mac, 5)).toBe(false);
+  });
+});
+
+describe("safeNext", () => {
+  it("keeps a path on this origin", () => {
+    const next = "/api/auth/oauth2/authorize?client_id=abc&state=x";
+    expect(safeNext(`?next=${encodeURIComponent(next)}`)).toBe(next);
+    expect(safeNext("?next=%2Fcli%3Fport%3D5000")).toBe("/cli?port=5000");
+  });
+
+  it("drops anything that could leave the origin", () => {
+    expect(safeNext("")).toBeNull();
+    expect(safeNext("?next=https%3A%2F%2Fevil.example")).toBeNull();
+    expect(safeNext("?next=%2F%2Fevil.example")).toBeNull();
+    expect(safeNext("?next=%2F%5Cevil.example")).toBeNull();
+    expect(safeNext("?next=javascript%3Aalert(1)")).toBeNull();
   });
 });
