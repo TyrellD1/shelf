@@ -13,8 +13,15 @@ export interface ShelfFilesTable {
   edited_at: Date;
 }
 
+/** Better Auth's table of registered OAuth clients; only what `mcp.ts` reads. */
+export interface OAuthClientTable {
+  clientId: string;
+  name: string | null;
+}
+
 export interface Database {
   shelf_files: ShelfFilesTable;
+  oauthClient: OAuthClientTable;
 }
 
 /**

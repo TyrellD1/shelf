@@ -14,6 +14,22 @@ export function isValidMachineId(value: string): boolean {
 }
 
 /**
+ * The machine an MCP client's writes are filed under, from the name it
+ * registered with: "Claude" -> `claude-mcp`. A name with nothing usable in it
+ * is plain `mcp`.
+ */
+export function mcpMachineId(clientName: string | null | undefined): string {
+  const slug = (clientName ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-?mcp$/, "")
+    .slice(0, 58)
+    .replace(/-+$/, "");
+  return slug ? `${slug}-mcp` : "mcp";
+}
+
+/**
  * The `machine` filter on the wire: one id, or several joined by commas
  * (`mac-mini,ci-runner`). Machine ids cannot contain commas, so this is
  * unambiguous. Invalid and repeated ids are dropped; an empty list means "all".

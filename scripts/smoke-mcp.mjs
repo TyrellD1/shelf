@@ -5,7 +5,7 @@
 //
 //   node scripts/smoke-mcp.mjs <api-url> <email> <password> [tag]
 //
-// It writes smoke/mcp-<tag>.html under the `mcp` machine.
+// It writes smoke/mcp-<tag>.html under the `claude-mcp` machine.
 
 import { createHash, randomBytes } from "node:crypto";
 import http1 from "node:http";
@@ -244,7 +244,7 @@ const path = `smoke/mcp-${TAG}.html`;
 const html = `<!doctype html><title>smoke ${TAG}</title><p>one</p>`;
 let result = await tool(token, "write", { path, html });
 check("write creates", result.data?.action === "created" && result.data?.path === path, JSON.stringify(result.raw));
-check("under the mcp machine", result.data?.machine === "mcp");
+check("under the machine named after the client", result.data?.machine === "claude-mcp");
 const id = result.data?.id;
 result = await tool(token, "write", { path, html });
 check("the same bytes again are a no-op", result.data?.action === "unchanged", JSON.stringify(result.data));

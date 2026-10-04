@@ -129,7 +129,8 @@ postage stamp.
 `read` and `write` (same versioning, same one-line descriptions from `shared/`). claude.ai
 connects over OAuth: it registers itself, you sign in with your shelf password and press Allow,
 and it gets a token bound to `/mcp`. Registration only accepts Claude's callback URLs. Files
-written this way land under the machine `mcp`, and `shelf sync` pulls them like any other machine's.
+written this way land under a machine named after the app that connected (`claude-mcp`), and
+`shelf sync` pulls them like any other machine's.
 
 ## Theming
 

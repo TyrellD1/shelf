@@ -2,6 +2,7 @@ export { sha1Hex } from "./hash.js";
 export {
   fileId,
   isValidMachineId,
+  mcpMachineId,
   parseMachineList,
   normalizePath,
   pathError,

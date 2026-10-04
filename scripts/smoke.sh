@@ -225,8 +225,8 @@ step "result"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
 cat <<'NOTE'
 
-note: this run left smoke-a-* / smoke-b-* and mcp smoke/* rows in the dev database.
+note: this run left smoke-a-* / smoke-b-* and claude-mcp smoke/* rows in the dev database.
       clear them with:
-        bash scripts/dev-db.sh psql -c "delete from shelf_files where machine_id like 'smoke-%' or (machine_id = 'mcp' and path_on_machine like 'smoke/%');"
+        bash scripts/dev-db.sh psql -c "delete from shelf_files where machine_id like 'smoke-%' or (machine_id = 'claude-mcp' and path_on_machine like 'smoke/%');"
 NOTE
 [ "$FAIL" -eq 0 ]

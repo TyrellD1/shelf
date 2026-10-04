@@ -8,6 +8,7 @@ import {
   normalizePath,
   pathError,
   isValidMachineId,
+  mcpMachineId,
   parseMachineList,
 } from "../src/paths.js";
 import { sha1Hex } from "../src/hash.js";
@@ -96,6 +97,25 @@ describe("machineHues", () => {
   it("falls back to the hash for an unknown machine", () => {
     expect(machineColor("solo").hue).toBe(machineHue("solo"));
     expect(machineColor("solo", ["other"]).hue).toBe(machineHue("solo"));
+  });
+});
+
+describe("mcpMachineId", () => {
+  it("names the machine after the client", () => {
+    expect(mcpMachineId("Claude")).toBe("claude-mcp");
+    expect(mcpMachineId("Claude Code (my-mac)")).toBe("claude-code-my-mac-mcp");
+  });
+
+  it("does not double the suffix", () => {
+    expect(mcpMachineId("Shelf MCP")).toBe("shelf-mcp");
+    expect(mcpMachineId("mcp")).toBe("mcp");
+  });
+
+  it("falls back to mcp and always yields a valid id", () => {
+    expect(mcpMachineId(null)).toBe("mcp");
+    expect(mcpMachineId("  ☃  ")).toBe("mcp");
+    expect(isValidMachineId(mcpMachineId("x".repeat(200)))).toBe(true);
+    expect(isValidMachineId(mcpMachineId("-- Agent --"))).toBe(true);
   });
 });
 

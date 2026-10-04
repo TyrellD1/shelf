@@ -7,7 +7,7 @@ disagree: the CLI (`cli/`), the desktop app (`desktop/`, Tauri v2), and the PWA/
 (`web/` + `ui/`). The CLI owns the local store and is the only writer; the desktop app shells
 out to it; the PWA reads the same data over HTTP. The Worker also serves an MCP endpoint for
 claude.ai (`web/src/mcp.ts`) whose tools mirror the CLI's `list` / `read` / `write`; what it
-writes lands under the machine `mcp` and reaches `~/.shelf` through `shelf sync`.
+writes lands under a machine named after the client (`claude-mcp`) and reaches `~/.shelf` through `shelf sync`.
 
 ## Rules that keep it coherent
 
