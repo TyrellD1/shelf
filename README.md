@@ -184,7 +184,8 @@ neon projects create --name shelf --region-id aws-us-east-1   # add --org-id if 
 neon connection-string --project-id <project-id>              # pooled is off by default
 
 # 2. Hyperdrive, which does the pooling itself, so give it the direct string
-npx wrangler hyperdrive create shelf-db --connection-string "postgres://..."
+# and turn its query cache off: a cached read hands the OAuth flow (and sign-in) stale rows
+npx wrangler hyperdrive create shelf-db --connection-string "postgres://..." --caching-disabled true
 ```
 
 Paste the printed id into the `hyperdrive` block in `web/wrangler.jsonc`, and set
