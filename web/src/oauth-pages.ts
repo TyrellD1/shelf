@@ -1,6 +1,6 @@
 import type { Auth } from "./auth.js";
 import type { Env } from "./env.js";
-import { MCP_MACHINE_ID } from "./mcp.js";
+import { mcpMachineId } from "@shelf/shared";
 import { escapeHtml, page } from "./page.js";
 
 /**
@@ -90,12 +90,16 @@ async function consent(request: Request, url: URL, env: Env, auth: Auth): Promis
 
   const clientId = url.searchParams.get("client_id") ?? "";
   let clientName = "An app";
+  let machineId = mcpMachineId(null);
   try {
     const client = (await auth.api.getOAuthClientPublic({
       query: { client_id: clientId },
       headers: request.headers,
     })) as { client_name?: string };
-    if (client.client_name) clientName = client.client_name;
+    if (client.client_name) {
+      clientName = client.client_name;
+      machineId = mcpMachineId(client.client_name);
+    }
   } catch {
     return page("Cannot continue", "That app is not registered with this shelf.", 400);
   }
@@ -111,7 +115,7 @@ async function consent(request: Request, url: URL, env: Env, auth: Auth): Promis
   const oauthQuery = url.search.replace(/^\?/, "");
   const body = `
     <p class="lede"><strong>${escapeHtml(clientName)}</strong> wants to list, read and write
-    the files on your shelf. What it writes is filed under the machine <code>${MCP_MACHINE_ID}</code>.</p>
+    the files on your shelf. What it writes is filed under the machine <code>${machineId}</code>.</p>
     <form method="post" action="/oauth/consent">
       <input type="hidden" name="oauth_query" value="${escapeHtml(oauthQuery)}" />
       <button type="submit" name="accept" value="yes">Allow</button>

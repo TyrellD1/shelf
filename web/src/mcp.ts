@@ -6,6 +6,7 @@ import {
   COMMANDS,
   SHELF_TAGLINE,
   fileUrl,
+  mcpMachineId,
   parseMachineList,
   type ShelfFileMeta,
 } from "@shelf/shared";
@@ -24,9 +25,6 @@ import { listFiles, resolveFile, writeVersioned } from "./files.js";
  * to keep between requests (no Durable Objects, no sessions).
  */
 
-/** Files written over MCP live under this machine id, beside your real machines. */
-export const MCP_MACHINE_ID = "mcp";
-
 export async function handleMcp(
   request: Request,
   env: Env,
@@ -34,23 +32,29 @@ export async function handleMcp(
   db: Kysely<Database>,
 ): Promise<Response> {
   const resource = mcpResource(env.APP_URL);
-  const userId = await verifiedUser(request, env, auth, resource);
-  if (!userId) return challenge(env);
+  const caller = await verifiedCaller(request, env, auth, resource);
+  if (!caller) return challenge(env);
 
-  const handler = createMcpHandler(() => createServer(env, db, userId), {
+  const handler = createMcpHandler(() => createServer(env, db, caller), {
     responseMode: "json",
     onerror: (error) => console.error("shelf: mcp", error.message),
   });
   return handler.fetch(request);
 }
 
-/** The user id from a valid access token for this resource, or null. */
-async function verifiedUser(
+/** Who a valid access token speaks for: the user, and the client it was issued to. */
+interface Caller {
+  userId: string;
+  clientId: string | null;
+}
+
+/** The caller from a valid access token for this resource, or null. */
+async function verifiedCaller(
   request: Request,
   env: Env,
   auth: Auth,
   resource: string,
-): Promise<string | null> {
+): Promise<Caller | null> {
   const token = /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") ?? "")?.[1];
   if (!token) return null;
   try {
@@ -59,10 +63,25 @@ async function verifiedUser(
       jwksFetch: async () => auth.api.getJwks(),
       verifyOptions: { issuer: `${env.APP_URL}/api/auth`, audience: resource },
     });
-    return typeof claims.sub === "string" ? claims.sub : null;
+    if (typeof claims.sub !== "string") return null;
+    return { userId: claims.sub, clientId: typeof claims.azp === "string" ? claims.azp : null };
   } catch {
     return null;
   }
+}
+
+/**
+ * Files written over MCP live beside your real machines, under one named after
+ * the client that wrote them (`claude-mcp`), so each connected app is told apart.
+ */
+async function machineFor(db: Kysely<Database>, clientId: string | null): Promise<string> {
+  if (!clientId) return mcpMachineId(null);
+  const client = await db
+    .selectFrom("oauthClient")
+    .select("name")
+    .where("clientId", "=", clientId)
+    .executeTakeFirst();
+  return mcpMachineId(client?.name);
 }
 
 /** RFC 9728: tells the client where to find the authorization server. */
@@ -84,7 +103,7 @@ function challenge(env: Env): Response {
   );
 }
 
-function createServer(env: Env, db: Kysely<Database>, userId: string): McpServer {
+function createServer(env: Env, db: Kysely<Database>, { userId, clientId }: Caller): McpServer {
   const server = new McpServer(
     { name: "shelf", version: "1" },
     { instructions: `Shelf: ${SHELF_TAGLINE}. Files are addressed by id or path.` },
@@ -163,7 +182,7 @@ function createServer(env: Env, db: Kysely<Database>, userId: string): McpServer
     },
     async ({ path, html, replace, asNew }) => {
       const result = await writeVersioned(db, userId, {
-        machineId: MCP_MACHINE_ID,
+        machineId: await machineFor(db, clientId),
         path,
         html,
         replace,
