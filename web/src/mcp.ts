@@ -8,12 +8,13 @@ import {
   fileUrl,
   mcpMachineId,
   parseMachineList,
+  versionNumber,
   type ShelfFileMeta,
 } from "@shelf/shared";
 import { mcpResource, type Auth } from "./auth.js";
 import type { Database } from "./db.js";
 import type { Env } from "./env.js";
-import { listFiles, resolveFile, writeVersioned } from "./files.js";
+import { listFiles, resolveFile, versionInfo, writeVersioned } from "./files.js";
 
 /**
  * The shelf over MCP, for claude.ai: the document commands of the CLI
@@ -114,6 +115,8 @@ function createServer(env: Env, db: Kysely<Database>, { userId, clientId }: Call
     path: file.path,
     editedAt: file.editedAt,
     bytes: file.bytes,
+    version: versionNumber(file.path),
+    ...(file.versions !== undefined ? { versions: file.versions } : {}),
     url: fileUrl(env.APP_URL, file.id),
   });
 
@@ -127,16 +130,20 @@ function createServer(env: Env, db: Kysely<Database>, { userId, clientId }: Call
         sort: z.enum(["created", "edited"]).optional(),
         limit: z.number().int().min(1).max(200).optional().describe("default 20"),
         offset: z.number().int().min(0).max(100_000).optional(),
+        allVersions: z.boolean().optional().describe("every version, not only the newest of each file"),
+        versionsOf: z.string().optional().describe("id or path: that file's versions, newest first"),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ search, machine, sort, limit, offset }) => {
+    async ({ search, machine, sort, limit, offset, allVersions, versionsOf }) => {
       const result = await listFiles(db, userId, {
         q: search,
         machines: parseMachineList(machine),
         sort,
         limit: limit ?? 20,
         offset,
+        allVersions,
+        versionsOf,
       });
       return ok({ files: result.files.map(link), total: result.total, hasMore: result.hasMore });
     },
@@ -150,16 +157,27 @@ function createServer(env: Env, db: Kysely<Database>, { userId, clientId }: Call
         file: z.string().describe("id (sf_…) or path"),
         machine: z.string().optional().describe("when the path exists on several machines"),
         meta: z.boolean().optional().describe("metadata only, no HTML"),
+        latest: z.boolean().optional().describe("the newest version of that file; build the next one on it"),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ file, machine, meta }) => {
-      const found = await resolveFile(db, userId, file, machine);
+    async ({ file, machine, meta, latest }) => {
+      let found = await resolveFile(db, userId, file, machine);
       if (!found) return fail("not_found", `not found: ${file}`, "list to see what is on the shelf");
-      if (meta) return ok(link(found));
+      const family = await versionInfo(db, userId, found);
+      if (latest && family.latest.id !== found.id) {
+        found = await resolveFile(db, userId, family.latest.id);
+        if (!found) return fail("not_found", `not found: ${family.latest.path}`, "retry");
+      }
+      // An old version says where the newest is, so an edit does not start from stale bytes.
+      const head = {
+        ...link({ ...found, versions: family.versions }),
+        ...(family.latest.id !== found.id ? { latest: family.latest } : {}),
+      };
+      if (meta) return ok(head);
       return {
         content: [
-          { type: "text" as const, text: JSON.stringify(link(found)) },
+          { type: "text" as const, text: JSON.stringify(head) },
           { type: "text" as const, text: found.html },
         ],
       };
@@ -169,9 +187,11 @@ function createServer(env: Env, db: Kysely<Database>, { userId, clientId }: Call
   server.registerTool(
     "write",
     {
-      description: `${COMMANDS.write}. A path that exists gets a new version (-v2) unless replace.`,
+      description: `${COMMANDS.write}. Write a path again to add a version (-v2, -v3); replace overwrites.`,
       inputSchema: z.object({
-        path: z.string().describe("relative, ends in .html, e.g. reports/q3.html"),
+        path: z
+          .string()
+          .describe("relative, ends in .html, e.g. reports/q3.html; any version's path adds the next one"),
         html: z
           .string()
           .describe("the whole document; inline all CSS, JS and images (no network access)"),

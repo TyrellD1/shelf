@@ -81,8 +81,9 @@ shelf status
 | `shelf setup [--api <url>] [--machine <id>]` | Browser handoff, stores a long-lived API key, sets this machine's id |
 | `shelf write <path> [--replace\|--as-new] [--no-push]` | Write (and push) a file and print its web link (`url` in `--json`). Existing paths become `-v2`, `-v3`, … |
 | `shelf open <path> [--browser]` | Write if missing, then open in the desktop app (falls back to the browser) |
-| `shelf list [--search q] [--machine id] [--sort created\|edited] [--limit n]` | The shelf, newest first |
-| `shelf read <id\|path> [--meta]` | Raw HTML on stdout (what the desktop reader uses) |
+| `shelf list [--search q] [--machine id] [--sort created\|edited] [--limit n]` | The shelf, newest first, one row per file at its newest version |
+| `shelf list --all-versions` / `--versions-of <id\|path>` | Every version as its own row / one file's versions, newest first |
+| `shelf read <id\|path> [--meta] [--latest]` | Raw HTML on stdout (what the desktop reader uses). `--latest` reads the file's newest version |
 | `shelf reveal <id\|path> [--print]` | Open the shelf's own copy of a file in your browser. Never writes or pushes |
 | `shelf sync [--pull-only\|--push-only]` | Push local writes, pull other machines |
 | `shelf status [--check]` | Config, counts, pending pushes, last sync |
@@ -99,6 +100,13 @@ Global: `--json`, `--stream`, `--version`, `--help`. Local data lives in `~/.she
 `report-v2.html` (then `-v3`, …) — you can see how a document evolved without ever losing a
 version. `--replace` overwrites in place instead, and re-running an identical write is a no-op
 (compared by sha256), so an agent can call `shelf write` twice without stacking versions.
+
+**Newest version by default.** `report.html`, `report-v2.html` and `report-v3.html` on one machine
+are one file with three versions. `shelf list`, the web and desktop list, and the MCP `list` tool
+show it once, at `-v3`, with `versions: 3`; `--all-versions` (an "All versions" toggle in the app)
+brings the older rows back, and the reader has a menu to step between versions. To add a version,
+write any of its paths again: `write` answers with the new `version`. Reading an old version says
+which one is newest (`latest`), and `read --latest` reads that one directly.
 
 **Local first.** The CLI owns `~/.shelf`: `html/<machine-id>/<path>` holds the bytes and
 `index.json` is a cache of metadata (id, sha256, timestamps, what was pushed). Delete the

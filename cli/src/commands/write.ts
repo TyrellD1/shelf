@@ -1,8 +1,9 @@
 import { flagBool, type ParsedArgs } from "../lib/flags.js";
 import { loadConfig, UserError } from "../lib/config.js";
 import type { Output } from "../lib/output.js";
+import { familyOf, loadIndex } from "../lib/store.js";
 import { toMeta, writeToShelf } from "../lib/writer.js";
-import { fileUrl } from "@shelf/shared";
+import { fileUrl, versionNumber } from "@shelf/shared";
 
 export async function writeCommand(args: ParsedArgs, output: Output): Promise<void> {
   const input = args.positional[0];
@@ -20,9 +21,13 @@ export async function writeCommand(args: ParsedArgs, output: Output): Promise<vo
 
   for (const warning of outcome.warnings) output.warn(warning);
 
+  // An agent appends a version by writing the same path again; say which one this is.
+  const version = versionNumber(outcome.path);
+  const versions = familyOf(loadIndex(), outcome.entry).length || 1;
+
   const human = {
     created: `wrote ${outcome.path}`,
-    versioned: `wrote ${outcome.path} (new version)`,
+    versioned: `wrote ${outcome.path} (new version, v${version})`,
     replaced: `replaced ${outcome.path}`,
     unchanged: `${outcome.path} is already up to date`,
   }[outcome.action];
@@ -37,6 +42,8 @@ export async function writeCommand(args: ParsedArgs, output: Output): Promise<vo
       action: outcome.action,
       path: outcome.path,
       requestedPath: outcome.requestedPath,
+      version,
+      versions,
       file: toMeta(outcome.entry),
       pushed: outcome.pushed,
       url,

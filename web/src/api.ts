@@ -167,6 +167,8 @@ export async function handleApi(
       dir: url.searchParams.get("dir") === "asc" ? "asc" : "desc",
       limit,
       offset,
+      allVersions: url.searchParams.get("versions") === "all",
+      versionsOf: url.searchParams.get("versionsOf")?.trim() || undefined,
     });
     return json(body);
   }

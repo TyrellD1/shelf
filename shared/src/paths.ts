@@ -79,6 +79,61 @@ export function familyKey(path: string): string {
   return `${path.slice(0, dot).replace(/-v\d+$/, "")}${path.slice(dot)}`;
 }
 
+/**
+ * A path's place in its family: `report-v3.html` is 3, `report.html` is 1.
+ * `FAMILY_SQL` and `VERSION_SQL` are the same rules for Postgres, so the
+ * Worker can collapse a family in SQL and agree with the CLI.
+ */
+export function versionNumber(path: string): number {
+  const match = /-v(\d+)\.[^.]*$/.exec(path);
+  return match ? Number(match[1]) : 1;
+}
+
+/** `regexp_replace(path, FAMILY_SQL.pattern, FAMILY_SQL.replacement)` is `familyKey(path)`. */
+export const FAMILY_SQL = { pattern: "-v[0-9]+(\\.[^.]*)$", replacement: "\\1" } as const;
+/** `substring(path from VERSION_SQL)` is the digits of `versionNumber(path)`, or null for 1. */
+export const VERSION_SQL = "-v([0-9]+)\\.[^.]*$";
+
+/** What the version rules need from a file. */
+interface Versioned {
+  id: string;
+  machineId: string;
+  path: string;
+  createdAt: string;
+}
+
+/** Newest version first: highest `-vN`, then the later write, then the id. */
+export function compareVersions(a: Versioned, b: Versioned): number {
+  return (
+    versionNumber(b.path) - versionNumber(a.path) ||
+    (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0) ||
+    (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
+  );
+}
+
+/** Families are per machine: two machines' `report.html` are separate documents. */
+export function versionFamily(file: Pick<Versioned, "machineId" | "path">): string {
+  return `${file.machineId}\u0000${familyKey(file.path)}`;
+}
+
+/**
+ * One file per version family, the newest, with `versions` set to the family
+ * size. Order follows the input (the first member seen holds the slot).
+ */
+export function latestVersions<T extends Versioned>(files: T[]): (T & { versions: number })[] {
+  const families = new Map<string, T[]>();
+  for (const file of files) {
+    const key = versionFamily(file);
+    const members = families.get(key);
+    if (members) members.push(file);
+    else families.set(key, [file]);
+  }
+  return [...families.values()].map((members) => ({
+    ...[...members].sort(compareVersions)[0],
+    versions: members.length,
+  }));
+}
+
 export function displayName(path: string): string {
   const base = path.split("/").pop() ?? path;
   return base.replace(/\.html?$/i, "");

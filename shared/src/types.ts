@@ -9,6 +9,8 @@ export interface ShelfFileMeta {
   bytes: number;
   /** sha256 of the stored html; lets a client skip identical content. */
   sha256?: string;
+  /** Size of the file's version family (see `latestVersions`); set on list results. */
+  versions?: number;
 }
 
 export interface ShelfFile extends ShelfFileMeta {
@@ -72,4 +74,10 @@ export interface ListQuery {
   sort?: SortKey;
   dir?: "asc" | "desc";
   withHtml?: boolean;
+  /** `latest` (the default) keeps the newest file of each version family; `all` keeps every file. */
+  versions?: VersionsMode;
+  /** Every version of this file's family (an id), newest first; ignores `versions`. */
+  versionsOf?: string;
 }
+
+export type VersionsMode = "latest" | "all";

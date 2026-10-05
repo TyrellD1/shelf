@@ -10,6 +10,7 @@ import {
   isDesktopBrowser,
   listSignature,
   versionOf,
+  versionChoices,
   formatBytes,
   matches,
   relativeTime,
@@ -123,6 +124,28 @@ describe("versionOf", () => {
     expect(versionOf(file({ path: "docs/report-v3.html" }))).toEqual({ base: "report", version: 3 });
     expect(versionOf(file({ path: "docs/report.html" }))).toEqual({ base: "report", version: null });
     expect(versionOf(file({ path: "-v2.html" }))).toEqual({ base: "-v2", version: null });
+  });
+});
+
+describe("versionChoices", () => {
+  it("labels a family newest first and marks the one on screen", () => {
+    const family = [
+      file({ id: "v3", path: "r-v3.html", createdAt: "2026-03-03T12:00:00.000Z" }),
+      file({ id: "v1", path: "r.html", createdAt: "2026-03-01T12:00:00.000Z" }),
+    ];
+    const choices = versionChoices(family, "v1");
+    expect(choices.map((choice) => [choice.short, choice.latest, choice.current])).toEqual([
+      ["v3 · latest", true, false],
+      ["v1", false, true],
+    ]);
+    expect(choices[0].label.startsWith("v3 · latest · ")).toBe(true);
+  });
+});
+
+describe("listSignature", () => {
+  it("changes when a file gains a version", () => {
+    const one = file({ versions: 2 });
+    expect(listSignature([one], "")).not.toBe(listSignature([{ ...one, versions: 3 }], ""));
   });
 });
 

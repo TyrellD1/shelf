@@ -12,8 +12,12 @@ import {
 } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import {
+  compareVersions,
+  familyKey,
   fileId,
+  latestVersions,
   nextVersionPath,
+  versionFamily,
   type MachineSummary,
   type ShelfFileMeta,
 } from "@shelf/shared";
@@ -210,22 +214,55 @@ export interface ListOptions {
   dir?: "asc" | "desc";
   limit?: number;
   offset?: number;
+  /** Keep every version instead of the newest of each family. */
+  allVersions?: boolean;
+  /** Only this entry's version family, newest version first. */
+  versionsOf?: Entry;
+}
+
+/** Entries as the version rules see them (`path` instead of `pathOnMachine`). */
+function versioned(entry: Entry) {
+  return { ...entry, path: entry.pathOnMachine };
+}
+
+/** Every entry in `of`'s version family, newest version first. */
+export function familyOf(index: ShelfIndex, of: Entry): Entry[] {
+  const key = versionFamily(versioned(of));
+  return Object.values(index.entries)
+    .filter((entry) => versionFamily(versioned(entry)) === key)
+    .sort((a, b) => compareVersions(versioned(a), versioned(b)));
 }
 
 export function listEntries(
   index: ShelfIndex,
   options: ListOptions,
 ): { files: ShelfFileMeta[]; total: number; hasMore: boolean } {
+  if (options.versionsOf) {
+    const family = familyOf(index, options.versionsOf);
+    const offset = options.offset ?? 0;
+    const page = family.slice(offset, offset + (options.limit ?? 20));
+    return {
+      files: page.map((entry) => ({ ...toMeta(entry), versions: family.length })),
+      total: family.length,
+      hasMore: offset + page.length < family.length,
+    };
+  }
+
   const q = options.q?.trim().toLowerCase();
-  let entries = Object.values(index.entries);
+  // Collapsed before the search, as the Worker does: a search matches the newest version.
+  let entries: (Entry & { versions?: number })[] = options.allVersions
+    ? withFamilySizes(Object.values(index.entries))
+    : latestVersions(Object.values(index.entries).map(versioned));
   if (options.machines?.length) {
     const keep = new Set(options.machines);
     entries = entries.filter((entry) => keep.has(entry.machineId));
   }
   if (q) {
+    // The family name counts too, so `report.html` still finds `report-v3.html`.
     entries = entries.filter(
       (entry) =>
         entry.pathOnMachine.toLowerCase().includes(q) ||
+        familyKey(entry.pathOnMachine).toLowerCase().includes(q) ||
         entry.machineId.toLowerCase().includes(q),
     );
   }
@@ -243,7 +280,20 @@ export function listEntries(
   const offset = options.offset ?? 0;
   const limit = options.limit ?? 20;
   const page = entries.slice(offset, offset + limit);
-  return { files: page.map(toMeta), total, hasMore: offset + page.length < total };
+  return {
+    files: page.map((entry) => ({ ...toMeta(entry), versions: entry.versions })),
+    total,
+    hasMore: offset + page.length < total,
+  };
+}
+
+function withFamilySizes(entries: Entry[]): (Entry & { versions: number })[] {
+  const sizes = new Map<string, number>();
+  for (const entry of entries) {
+    const key = versionFamily(versioned(entry));
+    sizes.set(key, (sizes.get(key) ?? 0) + 1);
+  }
+  return entries.map((entry) => ({ ...entry, versions: sizes.get(versionFamily(versioned(entry))) ?? 1 }));
 }
 
 export function machines(index: ShelfIndex): MachineSummary[] {

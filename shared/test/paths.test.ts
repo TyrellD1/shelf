@@ -10,6 +10,11 @@ import {
   isValidMachineId,
   mcpMachineId,
   parseMachineList,
+  compareVersions,
+  latestVersions,
+  versionNumber,
+  FAMILY_SQL,
+  VERSION_SQL,
 } from "../src/paths.js";
 import { sha1Hex } from "../src/hash.js";
 import { machineColor, machineHue, machineHues } from "../src/color.js";
@@ -152,6 +157,61 @@ describe("familyKey", () => {
     expect(familyKey("reports/q3-v2.html")).toBe("reports/q3.html");
     expect(familyKey("reports/q3-v12.htm")).toBe("reports/q3.htm");
     expect(familyKey(nextVersionPath(nextVersionPath("a.html")))).toBe("a.html");
+  });
+});
+
+describe("versionNumber", () => {
+  it("reads the -vN suffix, and 1 without one", () => {
+    expect(versionNumber("reports/q3.html")).toBe(1);
+    expect(versionNumber("reports/q3-v2.html")).toBe(2);
+    expect(versionNumber("reports/q3-v12.htm")).toBe(12);
+    expect(versionNumber("v2/report.html")).toBe(1);
+  });
+});
+
+describe("FAMILY_SQL / VERSION_SQL", () => {
+  // Postgres ARE and JS agree on these patterns, so JS stands in for the database here.
+  const sqlFamily = (path: string) =>
+    path.replace(new RegExp(FAMILY_SQL.pattern), FAMILY_SQL.replacement.replace("\\1", "$1"));
+  const sqlVersion = (path: string) => Number(new RegExp(VERSION_SQL).exec(path)?.[1] ?? 1);
+
+  it("match familyKey and versionNumber", () => {
+    for (const path of ["a.html", "a-v2.html", "x/a-v10.htm", "-v2.html", ".html", "a.b/c-v3.html", "a-V2.html"]) {
+      expect(sqlFamily(path)).toBe(familyKey(path));
+      expect(sqlVersion(path)).toBe(versionNumber(path));
+    }
+  });
+});
+
+describe("latestVersions", () => {
+  const file = (id: string, machineId: string, path: string, createdAt = "2026-01-01T00:00:00.000Z") => ({
+    id,
+    machineId,
+    path,
+    createdAt,
+  });
+
+  it("keeps the highest version of each family, per machine", () => {
+    const files = [
+      file("a1", "mac", "r.html"),
+      file("a3", "mac", "r-v3.html"),
+      file("a2", "mac", "r-v2.html"),
+      file("b1", "ci", "r.html"),
+      file("c1", "mac", "other.html"),
+    ];
+    const latest = latestVersions(files);
+    expect(latest.map((f) => [f.id, f.versions])).toEqual([
+      ["a3", 3],
+      ["b1", 1],
+      ["c1", 1],
+    ]);
+  });
+
+  it("breaks a version tie by the later write", () => {
+    const older = file("x", "mac", "r-v1.html", "2026-01-01T00:00:00.000Z");
+    const newer = file("y", "mac", "r.html", "2026-02-01T00:00:00.000Z");
+    expect([older, newer].sort(compareVersions)[0].id).toBe("y");
+    expect(latestVersions([older, newer])[0].id).toBe("y");
   });
 });
 

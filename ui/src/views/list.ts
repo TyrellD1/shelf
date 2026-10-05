@@ -34,6 +34,7 @@ export interface ListView {
 
 const PAGE_SIZE = 30;
 const SORT_KEY = "shelf-sort";
+const VERSIONS_KEY = "shelf-all-versions";
 const PULL_THRESHOLD = 64;
 
 type SortState = { key: SortKey; dir: "asc" | "desc"; label: string };
@@ -50,6 +51,14 @@ function storedSort(): number {
     return Number.isInteger(value) && value >= 0 && value < SORTS.length ? value : 0;
   } catch {
     return 0;
+  }
+}
+
+function storedAllVersions(): boolean {
+  try {
+    return localStorage.getItem(VERSIONS_KEY) === "1";
+  } catch {
+    return false;
   }
 }
 
@@ -80,7 +89,13 @@ function isTyping(target: EventTarget | null): boolean {
 }
 
 export function createListView(ctx: AppContext): ListView {
-  const state = { q: "", machines: [] as string[], sort: storedSort(), shown: PAGE_SIZE };
+  const state = {
+    q: "",
+    machines: [] as string[],
+    sort: storedSort(),
+    allVersions: storedAllVersions(),
+    shown: PAGE_SIZE,
+  };
   let files: ShelfFileMeta[] = [];
   let total = 0;
   let loaded = false;
@@ -170,6 +185,26 @@ export function createListView(ctx: AppContext): ListView {
   const sortLabel = h("span", { text: SORTS[state.sort].label });
   const sortBox = h("label", { class: "select" }, sortLabel, svg("M6 9l6 6 6-6", 12), sortSelect);
 
+  // Off by default: the list shows each file once, at its newest version.
+  const versionsButton = h("button", {
+    class: "picker-button",
+    attrs: { type: "button", title: "Show older versions as their own rows" },
+    text: "All versions",
+    on: {
+      click: () => {
+        state.allVersions = !state.allVersions;
+        try {
+          localStorage.setItem(VERSIONS_KEY, state.allVersions ? "1" : "0");
+        } catch {
+          // private mode: the choice lasts until reload
+        }
+        renderChrome();
+        resetPaging();
+        void refresh();
+      },
+    },
+  });
+
   const refreshButton = h(
     "button",
     {
@@ -198,7 +233,7 @@ export function createListView(ctx: AppContext): ListView {
     "div",
     { class: "summary" },
     summaryText,
-    h("div", { class: "summary-controls" }, picker.element, sortBox),
+    h("div", { class: "summary-controls" }, picker.element, versionsButton, sortBox),
   );
 
   const head = h(
@@ -252,7 +287,7 @@ export function createListView(ctx: AppContext): ListView {
   async function refresh(options: RefreshOptions = {}): Promise<void> {
     const ticket = ++sequence;
     const sort = SORTS[state.sort];
-    const filterKey = `${state.q}\u0000${state.machines.join(",")}\u0000${state.sort}`;
+    const filterKey = `${state.q}\u0000${state.machines.join(",")}\u0000${state.sort}\u0000${state.allVersions}`;
     if (!loaded) renderSkeleton();
     else if (!options.quiet) element.dataset.loading = "true";
     try {
@@ -263,6 +298,7 @@ export function createListView(ctx: AppContext): ListView {
         offset: 0,
         sort: sort.key,
         dir: sort.dir,
+        allVersions: state.allVersions || undefined,
       });
       if (ticket !== sequence) return;
       const fresh =
@@ -321,6 +357,8 @@ export function createListView(ctx: AppContext): ListView {
     picker.render(machines, state.machines, ctx.adapter.kind === "local" ? (status?.machineId ?? null) : null);
     sortSelect.value = String(state.sort);
     sortLabel.textContent = SORTS[state.sort].label;
+    versionsButton.setAttribute("aria-pressed", String(state.allVersions));
+    versionsButton.dataset.active = String(state.allVersions);
   }
 
   function renderSummary(): void {
@@ -410,7 +448,7 @@ export function createListView(ctx: AppContext): ListView {
     }
 
     const sort = SORTS[state.sort];
-    const next = listSignature(files, `${state.q}\u0000${sort.key}\u0000${total}`);
+    const next = listSignature(files, `${state.q}\u0000${sort.key}\u0000${total}\u0000${state.allVersions}`);
     if (next === signature && fresh.size === 0) return;
     signature = next;
 
@@ -450,6 +488,8 @@ export function createListView(ctx: AppContext): ListView {
   function rowFor(file: ShelfFileMeta, stamp: string, isFresh: boolean): HTMLElement {
     const color = machineColor(file.machineId, knownMachines());
     const { base, version } = versionOf(file);
+    // Older versions are hidden; say how many there are. The reader lists them.
+    const hidden = !state.allVersions && (file.versions ?? 1) > 1 ? file.versions : null;
     const folder = folderOf(file.path);
     const created = formatDate(file.createdAt);
     const edited = formatDate(file.editedAt);
@@ -486,7 +526,13 @@ export function createListView(ctx: AppContext): ListView {
           "span",
           { class: "title-line" },
           h("span", { class: "title" }, ...highlighted(base, state.q)),
-          version ? h("span", { class: "badge", text: `v${version}` }) : null,
+          version
+            ? h("span", {
+                class: "badge",
+                text: `v${version}`,
+                attrs: { title: hidden ? `Newest of ${hidden} versions` : null },
+              })
+            : null,
         ),
         h(
           "span",
@@ -498,6 +544,7 @@ export function createListView(ctx: AppContext): ListView {
             h("span", { class: "swatch", style: { background: color.swatch } }),
             ...highlighted(file.machineId, state.q),
           ),
+          hidden ? h("span", { class: "versions", text: `${hidden} versions` }) : null,
         ),
       ),
       h(

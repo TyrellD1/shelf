@@ -4,7 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs, flagBool, flagString, flagNumber } from "../src/lib/flags.js";
 import { shelfPathFor, relativeTime } from "../src/lib/writer.js";
-import { emptyIndex, listEntries, machines, pendingPush, resolveEntry, type Entry } from "../src/lib/store.js";
+import {
+  emptyIndex,
+  familyOf,
+  listEntries,
+  machines,
+  pendingPush,
+  resolveEntry,
+  type Entry,
+} from "../src/lib/store.js";
 import { sanitizeHostname } from "../src/commands/setup.js";
 
 describe("parseArgs", () => {
@@ -125,6 +133,37 @@ describe("index helpers", () => {
     expect(listEntries(index, { machines: ["mac-mini", "macbook"], limit: 10 }).total).toBe(2);
     expect(listEntries(index, { machines: [], limit: 10 }).total).toBe(2);
     expect(listEntries(index, { q: "b.html", limit: 10 }).files[0].id).toBe("sf_b");
+  });
+
+  it("shows the newest version of each file unless asked for all", () => {
+    const versioned = {
+      ...emptyIndex(),
+      entries: {
+        sf_r1: entry({ id: "sf_r1", pathOnMachine: "r.html", createdAt: "2026-03-01T00:00:00.000Z" }),
+        sf_r2: entry({ id: "sf_r2", pathOnMachine: "r-v2.html", createdAt: "2026-03-02T00:00:00.000Z" }),
+        sf_r3: entry({ id: "sf_r3", pathOnMachine: "r-v3.html", createdAt: "2026-03-03T00:00:00.000Z" }),
+        sf_o: entry({ id: "sf_o", machineId: "macbook", pathOnMachine: "r.html" }),
+      },
+    };
+    const latest = listEntries(versioned, { limit: 10 });
+    expect(latest.files.map((file) => [file.id, file.versions])).toEqual([
+      ["sf_r3", 3],
+      ["sf_o", 1],
+    ]);
+    expect(latest.total).toBe(2);
+
+    const all = listEntries(versioned, { limit: 10, allVersions: true });
+    expect(all.total).toBe(4);
+    expect(all.files.find((file) => file.id === "sf_r1")?.versions).toBe(3);
+
+    // A search matches the newest version (or its family's name), as on the server.
+    expect(listEntries(versioned, { q: "r-v2", limit: 10 }).total).toBe(0);
+    expect(listEntries(versioned, { q: "r.html", limit: 10, machines: ["mac-mini"] }).files[0].id).toBe("sf_r3");
+    expect(listEntries(versioned, { q: "r-v2", limit: 10, allVersions: true }).total).toBe(1);
+
+    const family = listEntries(versioned, { limit: 10, versionsOf: versioned.entries.sf_r1 });
+    expect(family.files.map((file) => file.id)).toEqual(["sf_r3", "sf_r2", "sf_r1"]);
+    expect(familyOf(versioned, versioned.entries.sf_o).map((e) => e.id)).toEqual(["sf_o"]);
   });
 
   it("reports machines", () => {

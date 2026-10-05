@@ -249,7 +249,8 @@ const id = result.data?.id;
 result = await tool(token, "write", { path, html });
 check("the same bytes again are a no-op", result.data?.action === "unchanged", JSON.stringify(result.data));
 result = await tool(token, "write", { path, html: html.replace("one", "two") });
-check("new bytes become -v2", result.data?.action === "versioned" && result.data?.path.endsWith("-v2.html"), JSON.stringify(result.data));
+check("new bytes become -v2", result.data?.action === "versioned" && result.data?.path.endsWith("-v2.html") && result.data?.version === 2, JSON.stringify(result.data));
+const v2 = result.data;
 result = await tool(token, "write", { path, html: html.replace("one", "two") });
 check("re-sending -v2's bytes does not stack a -v3", result.data?.action === "unchanged", JSON.stringify(result.data));
 result = await tool(token, "write", { path, html: html.replace("one", "three"), replace: true });
@@ -258,10 +259,27 @@ result = await tool(token, "write", { path: "/etc/passwd", html });
 check("a bad path is an error with a hint", result.isError && result.data?.code === "bad_path" && Boolean(result.data?.hint), JSON.stringify(result.data));
 
 result = await tool(token, "list", { search: `mcp-${TAG}` });
-check("list finds both versions", result.data?.total === 2, JSON.stringify(result.data));
+check(
+  "list shows the newest version only",
+  result.data?.total === 1 && result.data.files[0]?.id === v2?.id && result.data.files[0]?.versions === 2,
+  JSON.stringify(result.data),
+);
 check("list carries no html", !JSON.stringify(result.data).includes("<p>"));
+result = await tool(token, "list", { search: `mcp-${TAG}`, allVersions: true });
+check("list allVersions finds both", result.data?.total === 2, JSON.stringify(result.data));
+result = await tool(token, "list", { versionsOf: path });
+check(
+  "list versionsOf is the family, newest first",
+  result.data?.files?.map((f) => f.version).join(",") === "2,1",
+  JSON.stringify(result.data),
+);
 result = await tool(token, "read", { file: id });
 check("read by id returns the html", result.content[1]?.text?.includes("three"), JSON.stringify(result.raw).slice(0, 300));
+check("an old version points at the newest", result.data?.latest?.id === v2?.id && result.data?.versions === 2, JSON.stringify(result.data));
+result = await tool(token, "read", { file: id, latest: true });
+check("read latest returns the newest version", result.data?.id === v2?.id && result.content[1]?.text?.includes("two") && !result.data?.latest, JSON.stringify(result.data));
+result = await tool(token, "write", { path: v2?.path, html: html.replace("one", "four") });
+check("writing the newest path appends -v3", result.data?.action === "versioned" && result.data?.version === 3, JSON.stringify(result.data));
 result = await tool(token, "read", { file: `mcp-${TAG}.html` });
 check("read by path suffix finds it", result.data?.id === id, JSON.stringify(result.data));
 result = await tool(token, "read", { file: id, meta: true });

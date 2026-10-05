@@ -1,6 +1,6 @@
-import type { ShelfFileMeta } from "@shelf/shared";
+import { versionFamily, versionNumber, type ShelfFileMeta } from "@shelf/shared";
 import { h } from "../dom.js";
-import { formatBytes, relativeTime, titleOf } from "../logic.js";
+import { formatBytes, relativeTime, titleOf, versionChoices, versionOf } from "../logic.js";
 import { currentTheme, onThemeChange } from "../theme.js";
 import type { AppContext } from "../context.js";
 
@@ -37,6 +37,7 @@ export function createReaderView(ctx: AppContext, id: string): ReaderView {
   let source: string | null = null;
   let file: ShelfFileMeta | null = null;
   let disposed = false;
+  let subtitle = "";
 
   ctx.readerChrome.setTitle("Loading…", "");
   ctx.readerChrome.setActions({
@@ -101,10 +102,9 @@ export function createReaderView(ctx: AppContext, id: string): ReaderView {
     }
     ctx.cacheFile(found);
     file = found;
-    ctx.readerChrome.setTitle(
-      titleOf(found),
-      `${found.machineId} · ${formatBytes(found.bytes)} · ${relativeTime(found.editedAt)}`,
-    );
+    subtitle = `${found.machineId} · ${formatBytes(found.bytes)} · ${relativeTime(found.editedAt)}`;
+    ctx.readerChrome.setTitle(titleOf(found), subtitle);
+    void showVersions(found);
     source = await ctx.adapter.readerSource(found);
     if (disposed) {
       ctx.adapter.releaseReaderSource?.(source);
@@ -112,6 +112,39 @@ export function createReaderView(ctx: AppContext, id: string): ReaderView {
     }
     iframe.src = source;
   })();
+
+  /**
+   * The version menu, and a notice above the document when this is not the
+   * newest version. A failure leaves both out: the document is what matters.
+   */
+  async function showVersions(current: ShelfFileMeta): Promise<void> {
+    const family = await ctx.adapter
+      .list({ versionsOf: current.id, limit: 200 })
+      // An older CLI or Worker ignores `versionsOf` and answers with the whole shelf.
+      .then((response) => response.files.filter((file) => versionFamily(file) === versionFamily(current)))
+      .catch(() => [] as ShelfFileMeta[]);
+    if (disposed || family.length < 2) return;
+    const choices = versionChoices(family, current.id);
+    ctx.readerChrome.setVersions(choices, (id) => ctx.openReader(id));
+    // The menu names the version, so the title does not repeat it ("roadmap", not "roadmap-v3").
+    ctx.readerChrome.setTitle(versionOf(current).base, subtitle);
+    const here = choices.find((choice) => choice.current);
+    const newest = choices[0];
+    if (!here || here.latest) return;
+    view.prepend(
+      h(
+        "div",
+        { class: "reader-notice", attrs: { role: "status" } },
+        h("span", { text: `This is ${here.short}, an older version.` }),
+        h("button", {
+          class: "link-button",
+          attrs: { type: "button" },
+          text: `Open the latest (v${versionNumber(family[0].path)})`,
+          on: { click: () => ctx.openReader(newest.id) },
+        }),
+      ),
+    );
+  }
 
   return {
     element,
