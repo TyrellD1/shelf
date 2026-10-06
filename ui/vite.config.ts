@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 
-// One build serves both hosts: the Worker (https, PWA) and the Tauri app
+// One build serves both hosts: the web server (https, PWA) and the Tauri app
 // (tauri://localhost, local-first). The runtime picks the data adapter.
 export default defineConfig({
   base: "/",
@@ -12,7 +12,7 @@ export default defineConfig({
   },
   server: {
     strictPort: true,
-    // `wrangler dev` on 8787 provides /api; the dev UI talks to it directly.
+    // `npm run dev -w web` on 8787 provides /api; the dev UI talks to it directly.
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8787",

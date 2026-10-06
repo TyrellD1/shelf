@@ -8,7 +8,7 @@ export async function listCommand(args: ParsedArgs, output: Output): Promise<voi
   const index = loadIndexOrRebuild();
   const { files, total, hasMore } = listEntries(index, {
     q: flagString(args, "--search") ?? args.positional[0],
-    // `--machine a,b` keeps several machines; the same rule as the Worker's `machine`.
+    // `--machine a,b` keeps several machines; the same rule as the server's `machine`.
     machines: parseMachineList(flagString(args, "--machine") ?? process.env.SHELF_MACHINE),
     sort: flagString(args, "--sort") === "edited" ? "edited" : "created",
     dir: flagString(args, "--dir") === "asc" ? "asc" : "desc",

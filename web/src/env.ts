@@ -1,8 +1,4 @@
-export interface HyperdriveLike {
-  connectionString: string;
-}
-
-/** Env needed to build Better Auth (used by both the Worker and Node scripts). */
+/** Env needed to build Better Auth (used by both the server and Node scripts). */
 export interface AuthEnv {
   APP_URL: string;
   BETTER_AUTH_SECRET: string;
@@ -10,21 +6,18 @@ export interface AuthEnv {
 }
 
 export interface Env extends AuthEnv {
-  ASSETS: Fetcher;
-  /** Production: Hyperdrive binding in front of Postgres. */
-  HYPERDRIVE?: HyperdriveLike;
-  /** Local development / fallback: a plain Postgres URL. */
+  /** Production (Neon's pooled URL) and local development: a plain Postgres URL. */
   DATABASE_URL?: string;
   SEED_EMAIL?: string;
   SEED_PASSWORD?: string;
   SEED_NAME?: string;
 }
 
-export function databaseUrl(env: Pick<Env, "HYPERDRIVE" | "DATABASE_URL">): string {
-  const url = env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL;
+export function databaseUrl(env: Pick<Env, "DATABASE_URL">): string {
+  const url = env.DATABASE_URL;
   if (!url) {
     throw new Error(
-      "no database configured: set the HYPERDRIVE binding (production) or DATABASE_URL (see web/.dev.vars.example)",
+      "no database configured: set DATABASE_URL (see web/.dev.vars.example)",
     );
   }
   return url;

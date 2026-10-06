@@ -58,7 +58,7 @@ async function verifiedCaller(
   const token = /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") ?? "")?.[1];
   if (!token) return null;
   try {
-    // Keys come straight from the database, so the Worker never fetches itself.
+    // Keys come straight from the database, so the server never fetches itself.
     const claims = await verifyJwsAccessToken(token, {
       jwksFetch: async () => auth.api.getJwks(),
       verifyOptions: { issuer: `${env.APP_URL}/api/auth`, audience: resource },
