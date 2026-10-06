@@ -2,6 +2,7 @@ import { sql } from "kysely";
 import type { Kysely } from "kysely";
 import {
   MAX_HTML_BYTES,
+  appendScopeAllows,
   fileId,
   isValidMachineId,
   parseMachineList,
@@ -15,7 +16,7 @@ import {
   type WriteRequestBody,
   type WriteResponse,
 } from "@shelf/shared";
-import type { Auth } from "./auth.js";
+import { credentialScope, type Auth } from "./auth.js";
 import type { Database } from "./db.js";
 import type { Env } from "./env.js";
 import { getFile, listFiles, metaSelect, sha256Hex, toIso, toMeta } from "./files.js";
@@ -77,6 +78,23 @@ export async function handleApi(
   }
   const userId = session.user.id;
 
+  const scope = await credentialScope(auth, request.headers);
+  if (!scope) return fail(401, "unauthorized", "Invalid or expired credential.");
+  if (scope === "append" && !appendScopeAllows(method, path)) {
+    return fail(403, "forbidden_scope", "This key is append-only: it can write new documents, not read the shelf.");
+  }
+
+  if (path === "/api/me" && method === "GET" && scope === "append") {
+    const body: MeResponse = {
+      user: { id: session.user.id, email: session.user.email, name: session.user.name ?? null },
+      machines: [],
+      fileCount: 0,
+      appUrl: env.APP_URL,
+      scope,
+    };
+    return json(body);
+  }
+
   if (path === "/api/me" && method === "GET") {
     const [machines, countRow] = await Promise.all([
       db
@@ -105,6 +123,7 @@ export async function handleApi(
       })),
       fileCount: Number(countRow.count ?? 0),
       appUrl: env.APP_URL,
+      scope,
     };
     return json(body);
   }
@@ -226,7 +245,8 @@ export async function handleApi(
           replaced: false,
         });
       }
-      if (body.replace) {
+      // Append-only keys never overwrite: the client versions up on the 409.
+      if (body.replace && scope === "full") {
         const updated = await db
           .updateTable("shelf_files")
           .set({ html, sha256: digest, edited_at: new Date() })

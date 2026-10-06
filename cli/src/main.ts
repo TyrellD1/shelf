@@ -15,7 +15,9 @@ import { VERSION } from "./lib/version.js";
 const HELP = `shelf ${VERSION} — ${SHELF_TAGLINE}
 
 usage
-  shelf setup [--api <url>] [--machine <id>]   authorize this machine in the browser
+  shelf setup [--api <url>] [--machine <id>] [--append-only]
+                                               authorize this machine in the browser
+                                               (--append-only: headless, write but never read)
   shelf write <path.html> [--replace|--as-new] ${COMMANDS.write}
   shelf open <path.html> [--browser]           write if needed, then open in the app
   shelf reveal <id|path> [--print]             open the shelf's copy in your browser

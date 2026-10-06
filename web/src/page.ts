@@ -30,6 +30,39 @@ export function page(title: string, body: string, status: number): Response {
   }
   button:hover { opacity:.88; }
   button.secondary { background: transparent; color: var(--ink); border-color: var(--line); margin-top: 8px; }
+  /* /cli: the key's access picker and what it can do. */
+  .asked { margin: -6px 0 16px; font-size: 13px; color: var(--muted); }
+  .scopes { border: 0; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; }
+  .scopes legend, .caps-head {
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+    padding: 0; margin-bottom: 8px;
+  }
+  .scope {
+    display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 9px;
+  }
+  .scope:has(input:checked) { border-color: var(--ink); }
+  .scope input { margin: 3px 0 0; accent-color: var(--ink); }
+  .scope span { display: grid; gap: 1px; }
+  .scope small { color: var(--muted); font-size: 12.5px; }
+  .caps {
+    max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 9px;
+    margin-bottom: 16px;
+  }
+  .cap + .cap { border-top: 1px solid var(--line); }
+  .cap summary {
+    cursor: pointer; padding: 9px 12px; font-size: 13.5px; list-style: none;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .cap summary::-webkit-details-marker { display: none; }
+  .cap summary::after { content: "+"; color: var(--muted); }
+  .cap[open] summary::after { content: "\\2212"; }
+  .cap p { margin: 0; padding: 0 12px 10px; font-size: 12.5px; color: var(--muted); }
+  .append-note { display: none; margin: -6px 0 16px; font-size: 12.5px; color: var(--muted); }
+  /* Append only drops every capability that reads or overwrites the shelf. */
+  form:has(#scope-append:checked) .cap-read { display: none; }
+  form:has(#scope-append:checked) .cap-read + .cap:not(.cap-read) { border-top: 0; }
+  form:has(#scope-append:checked) .append-note { display: block; }
 </style></head>
 <body><main><div class="brand">Shelf</div><h1>${escapeHtml(title)}</h1>${body}</main></body></html>`;
   return new Response(html, {

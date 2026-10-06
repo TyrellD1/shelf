@@ -78,7 +78,7 @@ shelf status
 
 | Command | What it does |
 | --- | --- |
-| `shelf setup [--api <url>] [--machine <id>]` | Browser handoff, stores a long-lived API key, sets this machine's id |
+| `shelf setup [--api <url>] [--machine <id>] [--append-only]` | Browser handoff, stores a long-lived API key, sets this machine's id. `--append-only` preselects a write-only key |
 | `shelf write <path> [--replace\|--as-new] [--no-push]` | Write (and push) a file and print its web link (`url` in `--json`). Existing paths become `-v2`, `-v3`, … |
 | `shelf open <path> [--browser]` | Write if missing, then open in the desktop app (falls back to the browser) |
 | `shelf list [--search q] [--machine id] [--sort created\|edited] [--limit n]` | The shelf, newest first |
@@ -114,6 +114,16 @@ and the browser hands a long-lived API key to a loopback listener (`127.0.0.1:<r
 state-checked). The CLI stores the key in `~/.shelf/config.json` and signs every request with
 `x-api-key`. Re-running setup rotates that machine's key instead of piling up keys. Only
 addresses in `ALLOWED_EMAILS` can sign in at all.
+
+**Append-only keys.** The authorize page lets you pick the key's access: **Full** (the
+default) or **Append only**. An append-only key can write new documents and look up its own
+paths' size and hash so a rewrite lands on the next version, and that is all: no list, no read,
+no `--replace` (a rewrite always versions), no pull. It is meant for a headless box (CI, a
+build server, an agent sandbox) that only publishes: install the CLI there with `install.sh`,
+run `shelf setup --append-only`, and read what it wrote from any other device. The scope lives on
+the key server-side (Better Auth api-key `permissions`), so the server refuses reads whatever the
+CLI does; `/api/auth/*` and `/cli` never accept an API key, so a key cannot mint a broader one.
+Keys minted before scopes existed stay full.
 
 **Desktop app.** A thin Tauri shell; every read goes through the CLI (`shelf status|list|read|sync`),
 so the terminal and the window never disagree. `shelf sync` streams progress lines that the app
@@ -159,8 +169,8 @@ shelf setup --api http://localhost:8787
 - `npm run dev -w ui` — the UI alone against the local Worker (`/api` is proxied to :8787).
 - `npm run desktop` — the Tauri app against the Vite dev server.
 - `npm test` — unit tests (shared paths/ids, CLI flags + index, UI list logic, env allowlist).
-- `npm run smoke` — 30 end-to-end checks: setup handoff, write/version/replace, cross-machine
-  sync, worker auth, artifact serving.
+- `npm run smoke` — 66 end-to-end checks: setup handoff, write/version/replace, cross-machine
+  sync, worker auth, append-only keys, artifact serving.
 - `npm run typecheck` — strict TS across shared/cli/ui/web.
 
 ## Deploy (Cloudflare Workers + Neon)

@@ -1,5 +1,5 @@
 import { flagBool, type ParsedArgs } from "../lib/flags.js";
-import { loadConfig, UserError } from "../lib/config.js";
+import { loadConfig, requireConfig, requireFullScope, UserError } from "../lib/config.js";
 import type { Output } from "../lib/output.js";
 import { toMeta, writeToShelf } from "../lib/writer.js";
 import { fileUrl } from "@shelf/shared";
@@ -10,9 +10,12 @@ export async function writeCommand(args: ParsedArgs, output: Output): Promise<vo
     throw new UserError("usage: shelf write <path.html>", "usage", "shelf write ./report.html");
   }
 
+  const replace = flagBool(args, "--replace");
+  if (replace) requireFullScope(requireConfig(), "--replace");
+
   const outcome = await writeToShelf({
     inputPath: input,
-    replace: flagBool(args, "--replace"),
+    replace,
     asNew: flagBool(args, "--as-new") || flagBool(args, "--force"),
     push: !flagBool(args, "--no-push"),
     output,
