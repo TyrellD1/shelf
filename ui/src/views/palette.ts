@@ -57,7 +57,10 @@ export function openPalette(ctx: AppContext): () => void {
     }
     results.replaceChildren(
       ...items.map((file, index) => {
-        const color = machineColor(file.machineId);
+        const color = machineColor(
+          file.machineId,
+          (ctx.status()?.machines ?? []).map((machine) => machine.machineId),
+        );
         return h(
           "button",
           {

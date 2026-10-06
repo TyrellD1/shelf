@@ -58,7 +58,7 @@ export function createMachinePicker(onChange: (selected: string[]) => void): Mac
     if (selected.length === 0) label.replaceChildren(document.createTextNode("All machines"));
     else if (selected.length === 1) {
       label.replaceChildren(
-        h("span", { class: "swatch", style: { background: machineColor(selected[0]).swatch } }),
+        h("span", { class: "swatch", style: { background: machineColor(selected[0], known).swatch } }),
         document.createTextNode(selected[0] === thisDevice ? "This device" : selected[0]),
       );
     } else label.replaceChildren(document.createTextNode(`${selected.length} machines`));
@@ -96,7 +96,7 @@ export function createMachinePicker(onChange: (selected: string[]) => void): Mac
         { class: "picker-item", dataset: { checked: String(checked) } },
         checkbox,
         h("span", { class: "picker-check", attrs: { "aria-hidden": "true" } }, checked ? svg(ICONS.check, 12) : null),
-        h("span", { class: "swatch", style: { background: machineColor(machine.machineId).swatch } }),
+        h("span", { class: "swatch", style: { background: machineColor(machine.machineId, known).swatch } }),
         h(
           "span",
           { class: "picker-name" },

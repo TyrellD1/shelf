@@ -443,8 +443,12 @@ export function createListView(ctx: AppContext): ListView {
     if (hasMore) observer?.observe(footer);
   }
 
+  function knownMachines(): string[] {
+    return (ctx.status()?.machines ?? []).map((machine) => machine.machineId);
+  }
+
   function rowFor(file: ShelfFileMeta, stamp: string, isFresh: boolean): HTMLElement {
-    const color = machineColor(file.machineId);
+    const color = machineColor(file.machineId, knownMachines());
     const { base, version } = versionOf(file);
     const folder = folderOf(file.path);
     const created = formatDate(file.createdAt);

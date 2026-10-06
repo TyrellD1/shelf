@@ -135,6 +135,13 @@ postage stamp.
 
 **PWA.** The same UI bundle, hosted by the Worker, reading `/api/*` with a session cookie.
 
+**MCP (claude.ai).** The Worker serves `/mcp` with three tools that mirror the CLI: `list`,
+`read` and `write` (same versioning, same one-line descriptions from `shared/`). claude.ai
+connects over OAuth: it registers itself, you sign in with your shelf password and press Allow,
+and it gets a token bound to `/mcp`. Registration only accepts Claude's callback URLs. Files
+written this way land under a machine named after the app that connected (`claude-mcp`), and
+`shelf sync` pulls them like any other machine's.
+
 ## Theming
 
 `/html` and `/slides` artifacts keep their theme under a `html-theme` key and read it in a
@@ -214,6 +221,11 @@ shelf setup --api https://shelf.<name>.workers.dev
 shelf sync                                    # the first sync uploads what this machine has
 ```
 
+To use the shelf from claude.ai, add a custom connector (Settings → Connectors) with the URL
+`https://shelf.<name>.workers.dev/mcp` and leave the OAuth fields empty. Connecting sends you to
+your shelf to sign in and allow it. `npm run db:migrate` creates the OAuth tables, so re-run it
+against production after upgrading.
+
 ## Security notes
 
 - One user, by design: Better Auth email+password with an `ALLOWED_EMAILS` allowlist. Everyone
@@ -221,6 +233,10 @@ shelf sync                                    # the first sync uploads what this
 - The CLI token is a long-lived Better Auth API key, `0600`. `shelf logout` drops it locally;
   `shelf setup` rotates it.
 - The loopback handoff only redirects to `http://127.0.0.1:<port>` with a matching state nonce.
+- MCP: OAuth 2.1 with PKCE through Better Auth's MCP plugin. Dynamic registration is open but
+  limited to Claude's callbacks (`claude.ai`, `claude.com`, loopback for Claude Code), every
+  connection needs your password and an explicit Allow, and access tokens are JWTs whose audience
+  is `<APP_URL>/mcp`, verified in the Worker against its own keys.
 - Desktop artifacts are sandboxed in the reader iframe and served with
   `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'`.
   Inline scripts and styles work; CDNs, fonts and beacons do not.
@@ -233,9 +249,9 @@ shelf sync                                    # the first sync uploads what this
 cli/      the `shelf` CLI (TypeScript, bundled to a single file with esbuild)
 shared/   wire types, path/version rules, id hashing, machine colors
 ui/       the frontend used by both the desktop app and the PWA (vanilla TS, no framework)
-web/      Cloudflare Worker: Better Auth, /api, /cli handoff, PWA assets
+web/      Cloudflare Worker: Better Auth, /api, /cli handoff, /mcp + OAuth, PWA assets
 desktop/  Tauri v2 app: CLI bridge, shelf:// reader protocol, deep links
-scripts/  dev-db, dev-all, smoke, icons
+scripts/  dev-db, dev-all, smoke (+ smoke-mcp), icons
 ```
 
 Design notes and the reasoning behind the trade-offs: [docs/DESIGN.md](docs/DESIGN.md).

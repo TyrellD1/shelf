@@ -1,5 +1,5 @@
 import { sql } from "kysely";
-import type { Kysely, SelectExpression } from "kysely";
+import type { Kysely } from "kysely";
 import {
   MAX_HTML_BYTES,
   appendScopeAllows,
@@ -19,33 +19,12 @@ import {
 import { credentialScope, type Auth } from "./auth.js";
 import type { Database } from "./db.js";
 import type { Env } from "./env.js";
+import { getFile, listFiles, metaSelect, sha256Hex, toIso, toMeta } from "./files.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 200;
 const DEFAULT_CHANGES_LIMIT = 500;
 const MAX_CHANGES_LIMIT = 2000;
-
-interface MetaRow {
-  id: string;
-  machine_id: string;
-  path_on_machine: string;
-  created_at: Date;
-  edited_at: Date;
-  bytes: number;
-  sha256?: string;
-}
-
-/** Row shape `toMeta` accepts: either a metadata selection or a full row. */
-interface MetaInput {
-  id: string;
-  machine_id: string;
-  path_on_machine: string;
-  created_at: Date | string;
-  edited_at: Date | string;
-  bytes?: number;
-  sha256?: string | null;
-  html?: string;
-}
 
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -62,45 +41,8 @@ function fail(status: number, error: string, message?: string, extra?: object): 
   return json(body, status);
 }
 
-/** Selection for list responses: metadata plus the html size, never the html itself. */
-function metaSelect(): SelectExpression<Database, "shelf_files">[] {
-  return [
-    "id",
-    "machine_id",
-    "path_on_machine",
-    "created_at",
-    "edited_at",
-    "sha256",
-    sql<number>`octet_length(html)`.as("bytes"),
-  ];
-}
-
-function toMeta(row: MetaInput) {
-  const bytes =
-    row.bytes ?? (row.html ? new TextEncoder().encode(row.html).length : 0);
-  return {
-    id: row.id,
-    machineId: row.machine_id,
-    path: row.path_on_machine,
-    createdAt: toIso(row.created_at),
-    editedAt: toIso(row.edited_at),
-    bytes: Number(bytes),
-    sha256: row.sha256 ?? "",
-  };
-}
-
-/** Hex sha256 of a string, using Web Crypto (available in Workers). */
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 function isUnchanged(stored: string | null | undefined, digest: string): boolean {
   return Boolean(stored) && stored === digest;
-}
-
-function toIso(value: Date | string): string {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
 function intParam(value: string | null, fallback: number, min: number, max: number): number {
@@ -237,41 +179,14 @@ export async function handleApi(
     const offset = intParam(url.searchParams.get("offset"), 0, 0, 100_000);
     const search = url.searchParams.get("q")?.trim();
     const machineIds = parseMachineList(url.searchParams.get("machine"));
-    const withHtml = url.searchParams.get("withHtml") === "1";
-    const sort = url.searchParams.get("sort") === "edited" ? "edited_at" : "created_at";
-    const dir = url.searchParams.get("dir") === "asc" ? "asc" : "desc";
-
-    let base = db.selectFrom("shelf_files").where("user_id", "=", userId);
-    let counted = db.selectFrom("shelf_files").where("user_id", "=", userId);
-    if (machineIds.length > 0) {
-      base = base.where("machine_id", "in", machineIds);
-      counted = counted.where("machine_id", "in", machineIds);
-    }
-    if (search) {
-      const needle = `%${search.replace(/[%_\\]/g, "")}%`;
-      // Same rule as `shelf list --search`: a path or a machine name matches.
-      base = base.where((eb) =>
-        eb.or([eb("path_on_machine", "ilike", needle), eb("machine_id", "ilike", needle)]),
-      );
-      counted = counted.where((eb) =>
-        eb.or([eb("path_on_machine", "ilike", needle), eb("machine_id", "ilike", needle)]),
-      );
-    }
-
-    const [rows, totalRow] = await Promise.all([
-      base
-        .select(metaSelect())
-        .orderBy(sort, dir)
-        .offset(offset)
-        .limit(limit)
-        .execute(),
-      counted.select((eb) => eb.fn.countAll<number>().as("count")).executeTakeFirstOrThrow(),
-    ]);
-
-    const total = Number(totalRow.count ?? 0);
-    const files = rows.map((row) => toMeta(row));
-    const body: ListResponse = { files, total, hasMore: offset + files.length < total };
-    void withHtml;
+    const body: ListResponse = await listFiles(db, userId, {
+      q: search,
+      machines: machineIds,
+      sort: url.searchParams.get("sort") === "edited" ? "edited" : "created",
+      dir: url.searchParams.get("dir") === "asc" ? "asc" : "desc",
+      limit,
+      offset,
+    });
     return json(body);
   }
 
@@ -379,22 +294,10 @@ export async function handleApi(
 
   const fileMatch = /^\/api\/files\/([A-Za-z0-9_-]{3,64})$/.exec(path);
   if (fileMatch && method === "GET") {
-    const row = await db
-      .selectFrom("shelf_files")
-      .selectAll()
-      .where("user_id", "=", userId)
-      .where("id", "=", fileMatch[1])
-      .executeTakeFirst();
-    if (!row) return fail(404, "not_found", "no such file");
-    return json({
-      id: row.id,
-      machineId: row.machine_id,
-      path: row.path_on_machine,
-      createdAt: toIso(row.created_at),
-      editedAt: toIso(row.edited_at),
-      bytes: new TextEncoder().encode(row.html).length,
-      html: row.html,
-    });
+    const file = await getFile(db, userId, fileMatch[1]);
+    if (!file) return fail(404, "not_found", "no such file");
+    const { sha256: _sha256, ...body } = file;
+    return json(body);
   }
 
   return fail(404, "not_found", `no route for ${method} ${path}`);

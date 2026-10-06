@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { COMMANDS } from "../src/commands.js";
 import {
+  familyKey,
   fileId,
   fileUrl,
   nextVersionPath,
   normalizePath,
   pathError,
   isValidMachineId,
+  mcpMachineId,
   parseMachineList,
 } from "../src/paths.js";
 import { sha1Hex } from "../src/hash.js";
-import { machineHue } from "../src/color.js";
+import { machineColor, machineHue, machineHues } from "../src/color.js";
 
 describe("sha1Hex", () => {
   it("matches known vectors", () => {
@@ -66,6 +69,56 @@ describe("machineHue", () => {
   });
 });
 
+describe("machineHues", () => {
+  it("separates machines whose hashes land side by side", () => {
+    // 299° and 302° by hash: the pair that prompted slot assignment.
+    const hues = machineHues(["tyrell-macbook-pro", "grokbot-box", "cmc-tyrell-macbook-pro"]);
+    const values = [...hues.values()];
+    expect(new Set(values).size).toBe(3);
+    for (const a of values) {
+      for (const b of values) {
+        const gap = Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+        if (a !== b) expect(gap).toBeGreaterThanOrEqual(45);
+      }
+    }
+  });
+
+  it("ignores input order and duplicates", () => {
+    const a = machineHues(["b", "a", "c"]);
+    const b = new Map(machineHues(["c", "a", "b", "a"]));
+    expect(b).toEqual(new Map(a));
+  });
+
+  it("stays distinct past the minimum slot count", () => {
+    const ids = Array.from({ length: 20 }, (_, i) => `machine-${i}`);
+    expect(new Set(machineHues(ids).values()).size).toBe(20);
+  });
+
+  it("falls back to the hash for an unknown machine", () => {
+    expect(machineColor("solo").hue).toBe(machineHue("solo"));
+    expect(machineColor("solo", ["other"]).hue).toBe(machineHue("solo"));
+  });
+});
+
+describe("mcpMachineId", () => {
+  it("names the machine after the client", () => {
+    expect(mcpMachineId("Claude")).toBe("claude-mcp");
+    expect(mcpMachineId("Claude Code (my-mac)")).toBe("claude-code-my-mac-mcp");
+  });
+
+  it("does not double the suffix", () => {
+    expect(mcpMachineId("Shelf MCP")).toBe("shelf-mcp");
+    expect(mcpMachineId("mcp")).toBe("mcp");
+  });
+
+  it("falls back to mcp and always yields a valid id", () => {
+    expect(mcpMachineId(null)).toBe("mcp");
+    expect(mcpMachineId("  ☃  ")).toBe("mcp");
+    expect(isValidMachineId(mcpMachineId("x".repeat(200)))).toBe(true);
+    expect(isValidMachineId(mcpMachineId("-- Agent --"))).toBe(true);
+  });
+});
+
 describe("isValidMachineId", () => {
   it("enforces the id shape", () => {
     expect(isValidMachineId("mac-mini")).toBe(true);
@@ -90,5 +143,23 @@ describe("fileUrl", () => {
     expect(fileUrl("https://shelf.example.dev/", "mac:docs/a b.html")).toBe(
       "https://shelf.example.dev/#/f/mac%3Adocs%2Fa%20b.html",
     );
+  });
+});
+
+describe("familyKey", () => {
+  it("groups a path with its versions", () => {
+    expect(familyKey("reports/q3.html")).toBe("reports/q3.html");
+    expect(familyKey("reports/q3-v2.html")).toBe("reports/q3.html");
+    expect(familyKey("reports/q3-v12.htm")).toBe("reports/q3.htm");
+    expect(familyKey(nextVersionPath(nextVersionPath("a.html")))).toBe("a.html");
+  });
+});
+
+describe("COMMANDS", () => {
+  it("keeps every summary to one short line", () => {
+    for (const summary of Object.values(COMMANDS)) {
+      expect(summary).not.toContain("\n");
+      expect(summary.length).toBeLessThanOrEqual(40);
+    }
   });
 });

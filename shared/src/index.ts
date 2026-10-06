@@ -2,10 +2,12 @@ export { sha1Hex } from "./hash.js";
 export {
   fileId,
   isValidMachineId,
+  mcpMachineId,
   parseMachineList,
   normalizePath,
   pathError,
   nextVersionPath,
+  familyKey,
   displayName,
   fileRoute,
   fileUrl,
@@ -21,7 +23,8 @@ export {
   scopeFromPermissions,
 } from "./scope.js";
 export type { KeyScope } from "./scope.js";
-export { machineColor, machineHue } from "./color.js";
+export { COMMANDS, SHELF_TAGLINE } from "./commands.js";
+export { machineColor, machineHue, machineHues } from "./color.js";
 export type { MachineColor } from "./color.js";
 export type {
   ChangesResponse,

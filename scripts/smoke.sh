@@ -255,12 +255,21 @@ expect_match "the full shelf still sees the append-only write" 'append only, aga
 expect_match "authorize page offers append only" 'Append only' \
   curl -sf -b "$COOKIES" "$API_URL/cli?port=40000&state=$(printf 'b%.0s' $(seq 1 32))&scope=append"
 
+step "mcp"
+if node "$ROOT/scripts/smoke-mcp.mjs" "$API_URL" "$EMAIL" "$PASSWORD" "$$"; then
+  ok "claude.ai's OAuth flow and the list / read / write tools"
+else
+  bad "the MCP checks above"
+fi
+check_json "shelf sync pulls what MCP wrote" 'd["pulled"] >= 1' shelf "$A" sync --json --pull-only
+expect_match "and it reads locally" 'three' shelf "$A" read "smoke/mcp-$$.html"
+
 step "result"
 printf '  %d passed, %d failed\n' "$PASS" "$FAIL"
 cat <<'NOTE'
 
-note: this run left smoke-a-* / smoke-b-* / smoke-c-* rows in the dev database.
+note: this run left smoke-a-* / smoke-b-* / smoke-c-* and claude-mcp smoke/* rows in the dev database.
       clear them with:
-        bash scripts/dev-db.sh psql -c "delete from shelf_files where machine_id like 'smoke-%';"
+        bash scripts/dev-db.sh psql -c "delete from shelf_files where machine_id like 'smoke-%' or (machine_id = 'claude-mcp' and path_on_machine like 'smoke/%');"
 NOTE
 [ "$FAIL" -eq 0 ]
