@@ -244,7 +244,7 @@ for route in "/api/files?limit=1" "/api/files/$FILE_ID" "/api/changes" "/api/mac
 done
 expect_match "append-only cannot reach auth routes" '"error":"forbidden"' \
   curl -s -H "x-api-key: $C_KEY" "$API_URL/api/auth/api-key/list"
-expect_match "append-only cannot mint a key at /cli" 'Location: .*/login' \
+expect_match "append-only cannot mint a key at /cli" '[Ll]ocation: .*/login' \
   curl -s -i -H "x-api-key: $C_KEY" -X POST "$API_URL/cli/authorize" -d "state=$(printf 'a%.0s' $(seq 1 32))&port=40000"
 check_json "sync is push-only" 'd["pulled"] == 0 and d["scope"] == "append"' shelf "$C" sync --json
 expect_match "--pull-only is refused" '"code":"append_only"' shelf "$C" sync --pull-only --json
