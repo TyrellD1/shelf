@@ -158,19 +158,19 @@ Everything runs locally with parity to production (same routes, same Postgres dr
 ```bash
 cp web/.dev.vars.example web/.dev.vars     # fill in a secret, your email, a seed password
 npm install
-npm run dev:all                            # postgres + migrations + seed + wrangler dev on :8787
+npm run dev:all                            # postgres + migrations + seed + the server on :8787
 npm run install:cli                        # link the CLI from this checkout
 shelf setup --api http://localhost:8787
 ```
 
 - `scripts/dev-db.sh start|stop|status|psql` — a private Postgres on port 55432 (no Docker needed;
   `docker compose up -d` also works if you prefer containers).
-- `npm run dev -w web` — the Worker alone (`wrangler dev`, http://127.0.0.1:8787).
-- `npm run dev -w ui` — the UI alone against the local Worker (`/api` is proxied to :8787).
+- `npm run dev -w web` — the server alone (`web/scripts/dev.ts` in Node, http://127.0.0.1:8787).
+- `npm run dev -w ui` — the UI alone against the local server (`/api` is proxied to :8787).
 - `npm run desktop` — the Tauri app against the Vite dev server.
 - `npm test` — unit tests (shared paths/ids, CLI flags + index, UI list logic, env allowlist).
 - `npm run smoke` — 66 end-to-end checks: setup handoff, write/version/replace, cross-machine
-  sync, worker auth, append-only keys, artifact serving.
+  sync, server auth, append-only keys, artifact serving.
 - `npm run typecheck` — strict TS across shared/cli/ui/web.
 
 ## Deploy (Vercel + Neon)
@@ -221,9 +221,8 @@ To use the shelf from claude.ai, add a custom connector (Settings → Connectors
 your shelf to sign in and allow it. `npm run db:migrate` creates the OAuth tables, so re-run it
 against production after upgrading.
 
-Local development still runs the same routes in `wrangler dev` (`web/src/index.ts`).
-Workers' free plan allows 10 ms of CPU per request, which Better Auth does not fit in,
-so production moved off it.
+Local development runs the same routes in plain Node (`web/scripts/dev.ts`), and
+`npm run logs -w web` follows the production function's logs.
 
 ## Security notes
 

@@ -32,7 +32,7 @@ const OPENID_METADATA = new Set([
 ]);
 
 /**
- * Every route the server answers itself, for either host (`vercel.ts`, `index.ts`).
+ * Every route the server answers itself, for either host (`vercel.ts`, `scripts/dev.ts`).
  * Returns `null` for anything else, which the host serves from the built UI.
  * `services` is a thunk so a host can decide how long a pool and an auth instance live.
  */

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# End-to-end check of CLI + worker + Postgres against the local dev stack.
+# End-to-end check of CLI + server + Postgres against the local dev stack.
 #
 #   bash scripts/smoke.sh
 #
 # Assumes: scripts/dev-db.sh start, npm run db:migrate, npm run db:seed and a
-# worker on 127.0.0.1:8787 (`npm run dev`), or pass SHELF_API_URL.
+# server on 127.0.0.1:8787 (`npm run dev`), or pass SHELF_API_URL.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -112,7 +112,7 @@ setup_home() {
 }
 
 step "health"
-expect_match "worker answers /api/health" '"ok":true' curl -sf "$API_URL/api/health"
+expect_match "server answers /api/health" '"ok":true' curl -sf "$API_URL/api/health"
 
 step "browser session"
 curl -sf -c "$COOKIES" -X POST "$API_URL/api/auth/sign-in/email" \
@@ -169,11 +169,11 @@ else
 fi
 
 step "web app sees everything"
-expect_match "worker lists files" 'report' curl -sf -b "$COOKIES" "$API_URL/api/files?limit=20"
+expect_match "server lists files" 'report' curl -sf -b "$COOKIES" "$API_URL/api/files?limit=20"
 FILE_ID="$(shelf "$A" list --json --search=report.html | sed -n 's/.*"id": "\([^"]*\)".*/\1/p' | head -1)"
-expect_match "worker serves a document" '"html"' \
+expect_match "server serves a document" '"html"' \
   curl -sf -b "$COOKIES" "$API_URL/api/files/$FILE_ID"
-expect_match "worker rejects a stranger's key" '"error":"unauthorized"' \
+expect_match "server rejects a stranger's key" '"error":"unauthorized"' \
   curl -s -H 'x-api-key: not-a-real-key' "$API_URL/api/files/$FILE_ID"
 expect_match "changes feed works" 'nextSince' \
   curl -sf -b "$COOKIES" "$API_URL/api/changes?since=1970-01-01T00:00:00.000Z"

@@ -1,22 +1,20 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { HyperdriveLike } from "../src/env.js";
 
 export interface ScriptEnv {
   APP_URL: string;
   BETTER_AUTH_SECRET: string;
   ALLOWED_EMAILS?: string;
   DATABASE_URL?: string;
-  HYPERDRIVE?: HyperdriveLike;
   SEED_EMAIL?: string;
   SEED_PASSWORD?: string;
   SEED_NAME?: string;
 }
 
 /**
- * Small `.dev.vars` loader for Node scripts. Mirrors what `wrangler dev` does,
- * so the scripts and the Worker agree on configuration.
+ * Small `.dev.vars` loader, shared by the dev server and the Node scripts so
+ * they agree on configuration.
  */
 export function loadEnv(): ScriptEnv {
   const file = join(dirname(fileURLToPath(import.meta.url)), "..", ".dev.vars");

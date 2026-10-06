@@ -1,4 +1,4 @@
-# Local development secrets for `wrangler dev`. Copy to `.dev.vars` and fill in.
+# Local development settings for `npm run dev` and the db scripts. Copy to `.dev.vars` and fill in.
 #   cp .dev.vars.example .dev.vars
 #
 # DATABASE_URL comes from `scripts/dev-db.sh start` (or any Postgres).

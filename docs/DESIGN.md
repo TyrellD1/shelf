@@ -11,7 +11,7 @@ CLI (TypeScript, one bundled file)      ← owns ~/.shelf, the only writer
   ├── shelf sync  (push local sha256 deltas, pull server deltas)
   └── shelf setup (browser → loopback API key handoff)
 
-Cloudflare Worker + Postgres (Neon)     ← the API and the web app
+Vercel function + Postgres (Neon)       ← the API and the web app
   ├── /api/auth/*   Better Auth (email+password, allowlist, api keys)
   ├── /api/files*   REST over one table: shelf_files
   ├── /cli          server-rendered "authorize this machine" page
@@ -76,17 +76,15 @@ never expires (`keyExpiration.defaultExpiresIn` is `null`). The key carries a `c
 metadata, so re-running setup **rotates** that machine's key rather than accumulating keys.
 The same session cookie that authorizes the CLI is what signs the PWA in.
 
-### Postgres over Hyperdrive, `pg` everywhere
-`wrangler dev` + a local Postgres and production + Neon run the *same* driver (`pg`) and the
-same Kysely dialect; in production the connection string comes from a Hyperdrive binding, which
-is free-tier eligible and gives real transactions and connection pooling — the reason to prefer
-it over an HTTP-only Neon driver, whose transaction story is subtly different from what
-Better Auth's adapter expects. Neon was the user's call ("write the html just to a column") and
+### Postgres over `pg` everywhere
+Local Postgres and production Neon run the *same* driver (`pg`) and the same Kysely dialect; in
+production `DATABASE_URL` is Neon's pooled connection string, which gives real transactions and
+connection pooling — the reason to prefer it over an HTTP-only Neon driver, whose transaction
+story is subtly different from what Better Auth's adapter expects. The server first ran as a
+Cloudflare Worker behind Hyperdrive; the free plan's 10 ms of CPU per request is less than
+Better Auth needs, so it moved to a Vercel function. Neon was the user's call ("write the html just to a column") and
 it holds up: a single `shelf_files` table with `(user_id, machine_id, path_on_machine)` unique
-and `(user_id, id)` as the primary key. **The push-back I would offer**: Cloudflare D1 would
-remove the Neon account, the Hyperdrive config and the second vendor entirely; the only reason
-not to is that Postgres is the better long-term home for this data. Keeping `DATABASE_URL` as a
-fallback in `web/src/env.ts` means swapping the backend is one file.
+and `(user_id, id)` as the primary key.
 
 ### HTML in a column
 No object storage, no signed URLs. Bodies are capped at 5 MB, stored as text, and the list
@@ -151,10 +149,10 @@ straight away and leaves an "Opened in Shelf" page behind with "Read it here" an
 links in the app". The reader bar's app button launches once and forgets a remembered `browser`.
 File ids are the same everywhere, so the id in the web URL is the id the CLI knows; if the desktop
 has not pulled the file yet, the reader syncs once before saying it is not on this device. The
-fragment never reaches the Worker, which is why this lives in the UI rather than as a redirect.
+fragment never reaches the server, which is why this lives in the UI rather than as a redirect.
 
 ### One frontend build, two hosts
-`ui/` builds once; the Worker serves `ui/dist` as its assets and Tauri uses it as `frontendDist`.
+`ui/` builds once; Vercel serves `ui/dist` as static files and Tauri uses it as `frontendDist`.
 `ui/src/adapter.ts` picks the data source at runtime. No branching elsewhere, which is what keeps
 "the PWA is the same UI as the app but over the network" true rather than aspirational.
 
@@ -233,11 +231,11 @@ forgetting a manual resize.
 ## 3. Verification
 
 - `npm test` — ids/paths/versioning, CLI flag parsing + index queries, UI list/search logic.
-- `npm run smoke` — 30 end-to-end checks against a local Worker + Postgres: browser handoff,
+- `npm run smoke` — 30 end-to-end checks against a local server + Postgres: browser handoff,
   write/version/replace/no-op, cross-machine pull (including bytes landing in the store),
-  auth rejection for a stranger's key, and the worker-side document + changes endpoints.
+  auth rejection for a stranger's key, and the server-side document + changes endpoints.
 - `cargo test` — deep-link parsing and the CLI-backed reader path (with a stub CLI).
-- Manual: the UI was exercised in a real browser against the dev Worker (login, list, facets,
+- Manual: the UI was exercised in a real browser against the dev server (login, list, facets,
   reader, ⌘P palette).
 
 ## 4. Found by dogfooding

@@ -1,5 +1,5 @@
 /**
- * Minimal synchronous SHA-1. Shared by the CLI and the Worker so a file id is
+ * Minimal synchronous SHA-1. Shared by the CLI and the server so a file id is
  * identical everywhere it is computed. This is a naming hash, not a security
  * primitive — the CLI uses Node's sha256 for content change detection.
  */

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // End-to-end check of the MCP endpoint, playing claude.ai's part: discovery,
 // client registration, sign-in, consent, token exchange, refresh, then the
-// list / read / write tools. Runs against a local Worker (see scripts/smoke.sh).
+// list / read / write tools. Runs against a local server (see scripts/smoke.sh).
 //
 //   node scripts/smoke-mcp.mjs <api-url> <email> <password> [tag]
 //

@@ -6,8 +6,6 @@ dist/
 .env
 .dev.vars
 .dev.vars.local
-.wrangler/
-web/.wrangler/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
 cli/dist/

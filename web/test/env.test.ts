@@ -23,8 +23,7 @@ describe("isAllowedEmail", () => {
 });
 
 describe("databaseUrl", () => {
-  it("prefers the Hyperdrive binding and falls back to DATABASE_URL", () => {
-    expect(databaseUrl({ HYPERDRIVE: { connectionString: "postgres://hd" } })).toBe("postgres://hd");
+  it("returns DATABASE_URL", () => {
     expect(databaseUrl({ DATABASE_URL: "postgres://local" })).toBe("postgres://local");
   });
 
