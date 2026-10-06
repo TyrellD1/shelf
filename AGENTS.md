@@ -35,7 +35,7 @@ cli/src/lib/        config, store (index + bytes), api client, writer core, laun
 shared/src/         types, paths (versioning, validation), hash (file ids), color (machine hue)
 ui/src/             adapter (local|network), views (list, reader, palette, login), logic
 ui/src/logic.ts     pure list/search helpers — add tests here, not in views
-web/src/            index (routing), auth (Better Auth + OAuth for MCP), api (REST), files (queries
+web/src/            app (routing), vercel + index (hosts: Vercel in production, wrangler dev locally), auth (Better Auth + OAuth for MCP), api (REST), files (queries
                     shared by REST and MCP), mcp (tools), oauth-pages (login/consent), cli-auth
 web/scripts/        migrate, seed, env
 desktop/src-tauri/  main.rs (commands, shelf:// protocol, deep links)

@@ -1,0 +1,8 @@
+desktop/src-tauri
+docs
+node_modules
+ui/dist
+web/dist
+web/.dev.vars
+web/.wrangler
+cli/dist

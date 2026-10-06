@@ -25,14 +25,20 @@ export interface Database {
 }
 
 /**
- * One pool per request. `pg` speaks the Postgres wire protocol over Hyperdrive
- * in production and over a plain TCP connection in local dev — same code path.
+ * `pg` speaks the Postgres wire protocol to Neon's pooler in production, over
+ * Hyperdrive in a Worker, and over a plain TCP connection in local dev.
  */
-export function createDb(env: Pick<Env, "HYPERDRIVE" | "DATABASE_URL">): Kysely<Database> {
-  const pool = new Pool({
+export function createPool(env: Pick<Env, "HYPERDRIVE" | "DATABASE_URL">): Pool {
+  return new Pool({
     connectionString: databaseUrl(env),
     max: 4,
     idleTimeoutMillis: 5_000,
   });
+}
+
+export function createDb(
+  env: Pick<Env, "HYPERDRIVE" | "DATABASE_URL">,
+  pool: Pool = createPool(env),
+): Kysely<Database> {
   return new Kysely<Database>({ dialect: new PostgresDialect({ pool }) });
 }

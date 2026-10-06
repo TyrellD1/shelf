@@ -14,3 +14,6 @@ cli/dist/
 ui/dist/
 coverage/
 *.tsbuildinfo
+.vercel
+.env*.local
+web/dist/

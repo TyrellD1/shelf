@@ -10,10 +10,9 @@ export interface AuthEnv {
 }
 
 export interface Env extends AuthEnv {
-  ASSETS: Fetcher;
-  /** Production: Hyperdrive binding in front of Postgres. */
+  /** A Worker with a Hyperdrive binding in front of Postgres. */
   HYPERDRIVE?: HyperdriveLike;
-  /** Local development / fallback: a plain Postgres URL. */
+  /** Production (Neon's pooled URL) and local development: a plain Postgres URL. */
   DATABASE_URL?: string;
   SEED_EMAIL?: string;
   SEED_PASSWORD?: string;
@@ -24,7 +23,7 @@ export function databaseUrl(env: Pick<Env, "HYPERDRIVE" | "DATABASE_URL">): stri
   const url = env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL;
   if (!url) {
     throw new Error(
-      "no database configured: set the HYPERDRIVE binding (production) or DATABASE_URL (see web/.dev.vars.example)",
+      "no database configured: set DATABASE_URL (see web/.dev.vars.example)",
     );
   }
   return url;
