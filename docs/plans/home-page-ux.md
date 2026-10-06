@@ -110,5 +110,6 @@ when a filter is on.
 contain commas, so the format is unambiguous. There's no compatibility shim for older CLIs: both
 devices update together.
 
-Considered and dropped: latest-version-only, date range, and folder filters. The shelf stores
+Considered and dropped: date range and folder filters. (Latest-version-only was dropped here
+too; it later became the default, with an "All versions" toggle — see DESIGN.md.) The shelf stores
 paths relative to the git root, so the repo, which is usually the product, isn't recorded.

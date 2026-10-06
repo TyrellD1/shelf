@@ -40,6 +40,10 @@ export interface ListOptions {
   offset?: number;
   sort?: SortKey;
   dir?: "asc" | "desc";
+  /** Every version instead of the newest of each file. */
+  allVersions?: boolean;
+  /** Only this file's versions (an id), newest first. */
+  versionsOf?: string;
 }
 
 export interface OpenEvent {
@@ -131,6 +135,8 @@ export function createLocalAdapter(): DataAdapter {
       if (options.machines?.length) args.push(`--machine=${options.machines.join(",")}`);
       if (options.sort) args.push(`--sort=${options.sort}`);
       if (options.dir) args.push(`--dir=${options.dir}`);
+      if (options.allVersions) args.push("--all-versions");
+      if (options.versionsOf) args.push(`--versions-of=${options.versionsOf}`);
       return run<ListResponse>(args);
     },
 
@@ -249,6 +255,8 @@ export function createNetworkAdapter(): DataAdapter {
       if (options.machines?.length) params.set("machine", options.machines.join(","));
       params.set("sort", options.sort === "edited" ? "edited" : "created");
       params.set("dir", options.dir ?? "desc");
+      if (options.allVersions) params.set("versions", "all");
+      if (options.versionsOf) params.set("versionsOf", options.versionsOf);
       return api<ListResponse>(`/api/files?${params.toString()}`);
     },
 

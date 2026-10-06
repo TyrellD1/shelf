@@ -22,8 +22,9 @@ usage
   shelf open <path.html> [--browser]           write if needed, then open in the app
   shelf reveal <id|path> [--print]             open the shelf's copy in your browser
   shelf list [--search <q>] [--machine <id>] [--limit n] [--sort created|edited]
+             [--all-versions|--versions-of <id|path>]
                                                ${COMMANDS.list}
-  shelf read <id|path> [--meta]                ${COMMANDS.read}
+  shelf read <id|path> [--meta] [--latest]     ${COMMANDS.read}
   shelf sync [--pull-only|--push-only]         push local writes, pull other machines
   shelf status [--check]                       config, counts, sync state
   shelf machine [set <id>|rename <id>|<from> <to>] show, relabel or rename this machine

@@ -147,11 +147,35 @@ expect_match "same content is a no-op" '"action": "unchanged"' shelf "$A" write 
 expect_match "--replace updates in place" '"action": "replaced"' \
   shelf "$A" write "$TMP/report.html" --replace --json
 printf '<!doctype html><title>Smoke</title><h1>third</h1>' > "$TMP/report.html"
-NEW_PATH="$(shelf "$A" write "$TMP/report.html" --json | sed -n 's/.*"path": "\([^"]*\)".*/\1/p')"
+NEW_PATH="$(shelf "$A" write "$TMP/report.html" --json | sed -n 's/.*"path": "\([^"]*\)".*/\1/p' | head -1)"
 case "$NEW_PATH" in
   *-v[0-9]*.html) ok "a later edit gets a fresh version path ($(basename "$NEW_PATH"))" ;;
   *) bad "expected a versioned path, got '$NEW_PATH'" ;;
 esac
+
+step "newest version by default"
+check_json "list shows one row per file, at its newest version" \
+  'd["total"] == 1 and d["files"][0]["path"].endswith("report-v3.html") and d["files"][0]["versions"] == 3' \
+  shelf "$A" list --json --machine="$MACHINE_A" --search=report.html
+check_json "--all-versions lists every version" 'd["total"] == 3' \
+  shelf "$A" list --json --machine="$MACHINE_A" --search=report --all-versions
+check_json "--versions-of lists the family, newest first" \
+  '[f["path"].rsplit("/", 1)[-1] for f in d["files"]] == ["report-v3.html", "report-v2.html", "report.html"]' \
+  shelf "$A" list --json --versions-of="$NEW_PATH"
+check_json "reading an old version names the newest" \
+  'd["file"]["version"] == 1 and d["file"]["latest"]["path"] == "'"$NEW_PATH"'"' \
+  shelf "$A" read "${NEW_PATH%-v3.html}.html" --meta --json
+expect_match "read --latest returns the newest bytes" 'third' \
+  shelf "$A" read "${NEW_PATH%-v3.html}.html" --latest
+V3_ID="$(shelf "$A" read "$NEW_PATH" --meta --json | sed -n 's/.*"id": "\([^"]*\)".*/\1/p' | head -1)"
+check_json "the worker lists the newest version by default" \
+  'd["total"] == 1 and d["files"][0]["id"] == "'"$V3_ID"'" and d["files"][0]["versions"] == 3' \
+  curl -sf -b "$COOKIES" "$API_URL/api/files?machine=$MACHINE_A&q=report"
+check_json "and every version with versions=all" 'd["total"] == 3' \
+  curl -sf -b "$COOKIES" "$API_URL/api/files?machine=$MACHINE_A&q=report&versions=all"
+check_json "and one family with versionsOf" \
+  'd["total"] == 3 and d["files"][0]["id"] == "'"$V3_ID"'"' \
+  curl -sf -b "$COOKIES" "$API_URL/api/files?versionsOf=$V3_ID"
 
 step "sync between machines"
 printf '<!doctype html><title>From B</title><p>written on b</p>' > "$TMP/from-b.html"

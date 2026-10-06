@@ -15,6 +15,7 @@ const VALUE_FLAGS = new Set([
   "--dir",
   "--label",
   "--path",
+  "--versions-of",
 ]);
 
 export function parseArgs(argv: string[]): ParsedArgs {

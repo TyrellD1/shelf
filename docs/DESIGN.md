@@ -41,6 +41,18 @@ silently stack `-v2`, `-v3`, …
 `--replace` is the escape hatch for genuine in-place updates, and `--as-new` forces a new
 version without asking.
 
+### Lists show the newest version
+Versions stay separate rows in storage, but the user thinks of `report.html` and
+`report-v3.html` as one document. So every list (CLI, REST, MCP, and the UI on both hosts)
+collapses a *version family* (same machine, same `familyKey`) to its newest member: the highest
+`-vN`, then the later `created_at`, then the id (`compareVersions` in `shared/`). Each row carries
+`versions`, the family size. `--all-versions` / `versions=all` lists every row, and
+`--versions-of` / `versionsOf` lists one family newest first, which is what the reader's version
+menu uses. The Worker does the collapse in SQL (a window function over `FAMILY_SQL` and
+`VERSION_SQL`, the same rules as `familyKey` and `versionNumber`), so paging and totals count
+files, not rows. A search runs after the collapse and also matches the family name, so
+`report.html` still finds a family whose newest member is `report-v3.html`.
+
 ### Local bytes are the source of truth, `index.json` is a cache
 `~/.shelf/html/<machine-id>/<path>` holds the bytes for **every** machine you have synced,
 not just this one — that is what makes the desktop app able to render any document offline.

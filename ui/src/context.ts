@@ -1,10 +1,13 @@
 import type { ShelfFile, ShelfFileMeta } from "@shelf/shared";
 import type { DataAdapter, StatusInfo } from "./adapter.js";
+import type { VersionChoice } from "./logic.js";
 
 /** Top-bar controls the reader borrows while a document is open. */
 export interface ReaderChrome {
   setTitle(title: string, subtitle: string): void;
   setActions(actions: { back(): void; external(): void }): void;
+  /** The version menu; an empty list (or one version) hides it. */
+  setVersions(choices: VersionChoice[], pick: (id: string) => void): void;
   clear(): void;
 }
 

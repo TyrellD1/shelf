@@ -29,6 +29,9 @@ Nothing else is required. Do not chmod, move, or copy the file elsewhere.
 - **Paths are immutable.** Re-writing the same path creates `report-v2.html` automatically
   (then `-v3`, …). Re-writing identical bytes is a no-op. Never invent `-v2` names yourself,
   and only pass `--replace` if the user explicitly wants to overwrite the existing version.
+- **Updating a document is adding a version.** Read the newest one with
+  `shelf read <path> --latest`, edit it, and write it back under the same path; the result's
+  `version` says which one you made. The user sees only the newest version in their list.
 - **Use a relative path** so the shelf shows something readable (`outputs/report.html`, not
   `/var/folders/.../report.html`). Run `shelf write` from the project directory.
 - **Check the result.** `{"ok": true, "path": "...", "pushed": true, "url": "https://…/#/f/…"}`
@@ -39,7 +42,8 @@ Nothing else is required. Do not chmod, move, or copy the file elsewhere.
 ## Useful reads
 
 ```bash
-shelf list --json --search <fragment> --limit 20   # what's already there
+shelf list --json --search <fragment> --limit 20   # what's already there (newest version of each)
+shelf list --json --versions-of <id|path>          # every version of one file, newest first
 shelf read <id|path> --meta --json                 # metadata for one file
 shelf reveal <id|path> --print --json              # local copy on disk, plus its web `url`
 shelf status --json                                # api, machine id, pending pushes

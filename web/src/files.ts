@@ -1,7 +1,9 @@
 import { sql } from "kysely";
 import type { Kysely, SelectExpression } from "kysely";
 import {
+  FAMILY_SQL,
   MAX_HTML_BYTES,
+  VERSION_SQL,
   familyKey,
   fileId,
   isValidMachineId,
@@ -38,6 +40,10 @@ export interface ListOptions {
   dir?: "asc" | "desc";
   limit: number;
   offset?: number;
+  /** Keep every version instead of the newest of each family. */
+  allVersions?: boolean;
+  /** Only this file's version family (an id or path), newest version first. */
+  versionsOf?: string;
 }
 
 export type WriteAction = "created" | "versioned" | "replaced" | "unchanged";
@@ -96,6 +102,16 @@ export async function sha256Hex(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/** `familyKey(path_on_machine)` in SQL; see `FAMILY_SQL` in shared/. */
+const familySql = sql<string>`regexp_replace(path_on_machine, ${FAMILY_SQL.pattern}, ${FAMILY_SQL.replacement})`;
+/** `versionNumber(path_on_machine)` in SQL. */
+const versionSql = sql<number>`coalesce(substring(path_on_machine from ${VERSION_SQL})::numeric, 1)`;
+
+/**
+ * Lists files. By default each version family (per machine) shows only its
+ * newest member, ranked like `compareVersions`, and the search runs after that,
+ * as `shelf list` does.
+ */
 export async function listFiles(
   db: Kysely<Database>,
   userId: string,
@@ -107,24 +123,78 @@ export async function listFiles(
   const search = options.q?.trim();
   const machines = options.machines ?? [];
 
-  let base = db.selectFrom("shelf_files").where("user_id", "=", userId);
-  if (machines.length > 0) base = base.where("machine_id", "in", machines);
-  if (search) {
-    const needle = `%${search.replace(/[%_\\]/g, "")}%`;
-    // Same rule as `shelf list --search`: a path or a machine name matches.
-    base = base.where((eb) =>
-      eb.or([eb("path_on_machine", "ilike", needle), eb("machine_id", "ilike", needle)]),
-    );
+  let family: { machine_id: string; family: string } | null = null;
+  if (options.versionsOf) {
+    const of = await resolveMeta(db, userId, options.versionsOf);
+    if (!of) return { files: [], total: 0, hasMore: false };
+    family = { machine_id: of.machine_id, family: familyKey(of.path_on_machine) };
   }
 
+  const ranked = db
+    .with("ranked", (qb) => {
+      let inner = qb
+        .selectFrom("shelf_files")
+        .select([
+          "id",
+          "machine_id",
+          "path_on_machine",
+          "created_at",
+          "edited_at",
+          "sha256",
+          sql<number>`octet_length(html)`.as("bytes"),
+          familySql.as("family"),
+          sql<number>`count(*) over (partition by machine_id, ${familySql})`.as("versions"),
+          sql<number>`row_number() over (partition by machine_id, ${familySql} order by ${versionSql} desc, created_at desc, id desc)`.as(
+            "rank",
+          ),
+        ])
+        .where("user_id", "=", userId);
+      if (family) inner = inner.where("machine_id", "=", family.machine_id);
+      else if (machines.length > 0) inner = inner.where("machine_id", "in", machines);
+      return inner;
+    })
+    .selectFrom("ranked");
+
+  let base = ranked;
+  if (family) {
+    base = base.where("family", "=", family.family);
+  } else {
+    if (!options.allVersions) base = base.where("rank", "=", 1);
+    if (search) {
+      const needle = `%${search.replace(/[%_\\]/g, "")}%`;
+      // Same rule as `shelf list --search`: a path, its family name or a machine name matches.
+      base = base.where((eb) =>
+        eb.or([
+          eb("path_on_machine", "ilike", needle),
+          eb("family", "ilike", needle),
+          eb("machine_id", "ilike", needle),
+        ]),
+      );
+    }
+  }
+
+  const page = family
+    ? base.selectAll().orderBy("rank", "asc")
+    : base.selectAll().orderBy(sort, dir).orderBy("id", "asc");
   const [rows, totalRow] = await Promise.all([
-    base.select(metaSelect()).orderBy(sort, dir).offset(offset).limit(options.limit).execute(),
+    page.offset(offset).limit(options.limit).execute(),
     base.select((eb) => eb.fn.countAll<number>().as("count")).executeTakeFirstOrThrow(),
   ]);
 
   const total = Number(totalRow.count ?? 0);
-  const files = rows.map((row) => toMeta(row));
+  const files = rows.map((row) => ({ ...toMeta(row), versions: Number(row.versions) }));
   return { files, total, hasMore: offset + files.length < total };
+}
+
+/** The size of `file`'s version family and its newest member (which may be `file`). */
+export async function versionInfo(
+  db: Kysely<Database>,
+  userId: string,
+  file: ShelfFileMeta,
+): Promise<{ versions: number; latest: { id: string; path: string } }> {
+  const { files, total } = await listFiles(db, userId, { versionsOf: file.id, limit: 1 });
+  const latest = files[0] ?? file;
+  return { versions: Math.max(total, 1), latest: { id: latest.id, path: latest.path } };
 }
 
 export async function getFile(
@@ -153,17 +223,34 @@ export async function resolveFile(
   target: string,
   machineId?: string,
 ): Promise<ShelfFile | null> {
+  const found = await resolveMeta(db, userId, target, machineId);
+  return found ? getFile(db, userId, found.id) : null;
+}
+
+/** `resolveFile` without the html. */
+async function resolveMeta(
+  db: Kysely<Database>,
+  userId: string,
+  target: string,
+  machineId?: string,
+): Promise<{ id: string; machine_id: string; path_on_machine: string } | null> {
   const wanted = normalizePath(target);
   if (!wanted) return null;
+  const columns = ["id", "machine_id", "path_on_machine"] as const;
   if (/^sf_[a-f0-9]{20}$/.test(wanted)) {
-    const byId = await getFile(db, userId, wanted);
+    const byId = await db
+      .selectFrom("shelf_files")
+      .select(columns)
+      .where("user_id", "=", userId)
+      .where("id", "=", wanted)
+      .executeTakeFirst();
     if (byId) return byId;
   }
 
   const suffix = `%/${wanted.replace(/[%_\\]/g, "\\$&")}`;
   let query = db
     .selectFrom("shelf_files")
-    .select(["id", "path_on_machine"])
+    .select(columns)
     .where("user_id", "=", userId)
     .where((eb) =>
       eb.or([eb("path_on_machine", "=", wanted), eb("path_on_machine", "like", suffix)]),
@@ -175,7 +262,7 @@ export async function resolveFile(
     .orderBy("edited_at", "desc")
     .limit(1)
     .execute();
-  return matches[0] ? getFile(db, userId, matches[0].id) : null;
+  return matches[0] ?? null;
 }
 
 /**

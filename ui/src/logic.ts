@@ -1,4 +1,4 @@
-import { displayName, type ShelfFileMeta, type SortKey } from "@shelf/shared";
+import { displayName, versionNumber, type ShelfFileMeta, type SortKey } from "@shelf/shared";
 
 /** Pure list helpers — no DOM, so they are cheap to test. */
 
@@ -128,6 +128,35 @@ export function versionOf(file: ShelfFileMeta): { base: string; version: number 
   return { base: match[1], version: Number(match[2]) };
 }
 
+export interface VersionChoice {
+  id: string;
+  /** The menu entry: "v3 · latest · Oct 5, 2026". */
+  label: string;
+  /** The closed menu: "v3 · latest", "v2". */
+  short: string;
+  latest: boolean;
+  current: boolean;
+}
+
+/**
+ * The reader's version menu, from a family listed newest first:
+ * "v3 · latest · Oct 5, 2026", "v2 · Oct 1, 2026", …
+ */
+export function versionChoices(family: ShelfFileMeta[], currentId: string): VersionChoice[] {
+  return family.map((file, index) => {
+    const number = versionNumber(file.path);
+    const latest = index === 0;
+    const short = latest ? `v${number} · latest` : `v${number}`;
+    return {
+      id: file.id,
+      label: [short, formatDate(file.createdAt)].filter(Boolean).join(" · "),
+      short,
+      latest,
+      current: file.id === currentId,
+    };
+  });
+}
+
 /** The folder part of a path, `""` for a file at the root. */
 export function folderOf(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -192,7 +221,10 @@ export function groupByDate<T>(
 export function listSignature(files: ShelfFileMeta[], extra: string, now: number = Date.now()): string {
   return [
     extra,
-    ...files.map((file) => `${file.id}:${file.editedAt}:${file.bytes}:${relativeTime(file.editedAt, now)}:${relativeTime(file.createdAt, now)}`),
+    ...files.map(
+      (file) =>
+        `${file.id}:${file.editedAt}:${file.bytes}:${file.versions ?? 1}:${relativeTime(file.editedAt, now)}:${relativeTime(file.createdAt, now)}`,
+    ),
   ].join("|");
 }
 

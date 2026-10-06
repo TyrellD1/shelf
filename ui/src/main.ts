@@ -116,6 +116,7 @@ async function boot(): Promise<void> {
     const noopChrome: ReaderChrome = {
       setTitle: () => undefined,
       setActions: () => undefined,
+      setVersions: () => undefined,
       clear: () => undefined,
     };
     const ctx = contextFor(adapter, () => status, () => undefined, noopChrome, async () => undefined);
@@ -189,7 +190,7 @@ function createApp(
 
   const viewHost = h("div", { class: "view-host" });
   const syncChip = h("button", { class: "chip", attrs: { type: "button" } });
-  const userChip = h("span", { class: "chip", attrs: { hidden: true } });  const signOutButton = h(
+  const userChip = h("span", { class: "chip user-chip", attrs: { hidden: true } });  const signOutButton = h(
     "button",
     {
       class: "icon-button",
@@ -211,6 +212,16 @@ function createApp(
   const readerTitle = h("span", { class: "reader-title" });
   const readerSep = h("span", { class: "reader-sep", text: "·", attrs: { "aria-hidden": "true" } });
   const readerSubtitle = h("span", { class: "reader-subtitle" });
+  // A native select over a small label, like the list's sort control.
+  const versionLabel = h("span");
+  const versionSelect = h("select", { attrs: { "aria-label": "Version" } });
+  const versionBox = h(
+    "label",
+    { class: "select reader-versions", attrs: { hidden: true, title: "Versions of this file" } },
+    versionLabel,
+    svg("M6 9l6 6 6-6", 12),
+    versionSelect,
+  );
   const readerChrome: ReaderChrome = {
     setTitle(title, subtitle) {
       readerTitle.textContent = title;
@@ -232,6 +243,7 @@ function createApp(
           svg(ICONS.arrowLeft, 16),
         ),
         h("span", { class: "reader-heading" }, readerTitle, readerSep, readerSubtitle),
+        versionBox,
       );
       const appButton =
         adapter.kind === "network" && canHandOff()
@@ -264,7 +276,21 @@ function createApp(
       readerLeft.hidden = false;
       readerRight.hidden = false;
     },
+    setVersions(choices, pick) {
+      const current = choices.find((choice) => choice.current);
+      versionBox.hidden = choices.length < 2 || !current;
+      if (versionBox.hidden || !current) return;
+      versionLabel.textContent = current.short;
+      versionBox.dataset.old = String(!current.latest);
+      versionSelect.replaceChildren(
+        ...choices.map((choice) => h("option", { attrs: { value: choice.id }, text: choice.label })),
+      );
+      versionSelect.value = current.id;
+      versionSelect.onchange = () => pick(versionSelect.value);
+    },
     clear() {
+      versionBox.hidden = true;
+      versionSelect.onchange = null;
       readerLeft.hidden = true;
       readerRight.hidden = true;
       readerLeft.replaceChildren();
