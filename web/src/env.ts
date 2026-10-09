@@ -18,6 +18,8 @@ export interface Env extends AuthEnv {
   SEED_EMAIL?: string;
   SEED_PASSWORD?: string;
   SEED_NAME?: string;
+  /** Discord webhook told about every new file. Unset: no notifications. */
+  DISCORD_WEBHOOK_URL?: string;
 }
 
 export function databaseUrl(env: Pick<Env, "HYPERDRIVE" | "DATABASE_URL">): string {
