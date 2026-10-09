@@ -590,7 +590,7 @@
 <section class="slide" id="slide-3">
   <p class="kicker">Shape</p>
   <h1>One writer, one store, three ways to read it.</h1>
-  <svg class="diagram" viewBox="0 0 1040 380" role="img" aria-label="The CLI writes to the local shelf at ~/.shelf. The desktop app reads the local shelf through the CLI. The CLI syncs with the Cloudflare Worker and Postgres. The PWA reads the same Worker over the network.">
+  <svg class="diagram" viewBox="0 0 1040 380" role="img" aria-label="The CLI writes to the local shelf at ~/.shelf. The desktop app reads the local shelf through the CLI. The CLI syncs with the Vercel server and Postgres. The PWA reads the same server over the network.">
     <defs><marker id="shelf-shape-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10Z"/></marker></defs>
     <g marker-end="url(#shelf-shape-arrow)">
       <path class="edge" d="M150 86H300"/>
@@ -608,7 +608,7 @@
       <text x="85" y="104">harness</text>
       <text x="365" y="66">shelf CLI</text>
       <text x="365" y="100">~/.shelf</text>
-      <text x="850" y="76">Cloudflare Worker</text>
+      <text x="850" y="76">Vercel function</text>
       <text x="850" y="104">+ Postgres (Neon)</text>
       <text x="160" y="336">desktop app · reads the disk</text>
       <text x="740" y="316">PWA · reads the API</text>
