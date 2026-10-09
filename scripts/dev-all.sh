@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Everything needed for a local run: Postgres, schema, seed account, worker.
+# Everything needed for a local run: Postgres, schema, seed account, server.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,7 +16,7 @@ npm --prefix "$ROOT" run db:seed
 npm --prefix "$ROOT" run build -w ui
 
 echo
-echo "worker:   http://localhost:8787"
+echo "server:   http://localhost:8787"
 echo "cli:      npm run install:cli && shelf setup --api http://localhost:8787"
 echo
 exec npm --prefix "$ROOT" run dev

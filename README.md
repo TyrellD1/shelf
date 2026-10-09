@@ -21,7 +21,7 @@ native desktop app (fast, offline, no network) or in a PWA on your phone.
                             │ shelf sync (push/pull, sha256 diffed)
                             ▼
         ┌──────────────────────────────────────────┐
-        │ Cloudflare Worker + Postgres (Neon)       │   ← the web app and the API
+        │ Vercel function + Postgres (Neon)         │   ← the web app and the API
         │ /api/files  /api/changes  /api/auth  /cli │
         └──────────────────────────────────────────┘
 ```
@@ -133,9 +133,9 @@ scripts, but they cannot reach the network. The reader's controls live in the to
 floats over the document, and the window opens at 1708x940 (clamped to the display) instead of a
 postage stamp.
 
-**PWA.** The same UI bundle, hosted by the Worker, reading `/api/*` with a session cookie.
+**PWA.** The same UI bundle, hosted on Vercel, reading `/api/*` with a session cookie.
 
-**MCP (claude.ai).** The Worker serves `/mcp` with three tools that mirror the CLI: `list`,
+**MCP (claude.ai).** The server serves `/mcp` with three tools that mirror the CLI: `list`,
 `read` and `write` (same versioning, same one-line descriptions from `shared/`). claude.ai
 connects over OAuth: it registers itself, you sign in with your shelf password and press Allow,
 and it gets a token bound to `/mcp`. Registration only accepts Claude's callback URLs. Files
@@ -153,54 +153,52 @@ Shelf; they simply open in the theme the app is showing, and follow a live toggl
 
 ## Local development
 
-Everything runs locally with parity to production (same Worker code, same Postgres driver).
+Everything runs locally with parity to production (same routes, same Postgres driver).
 
 ```bash
 cp web/.dev.vars.example web/.dev.vars     # fill in a secret, your email, a seed password
 npm install
-npm run dev:all                            # postgres + migrations + seed + wrangler dev on :8787
+npm run dev:all                            # postgres + migrations + seed + the server on :8787
 npm run install:cli                        # link the CLI from this checkout
 shelf setup --api http://localhost:8787
 ```
 
 - `scripts/dev-db.sh start|stop|status|psql` — a private Postgres on port 55432 (no Docker needed;
   `docker compose up -d` also works if you prefer containers).
-- `npm run dev -w web` — the Worker alone (`wrangler dev`, http://127.0.0.1:8787).
-- `npm run dev -w ui` — the UI alone against the local Worker (`/api` is proxied to :8787).
+- `npm run dev -w web` — the server alone (`web/scripts/dev.ts` in Node, http://127.0.0.1:8787).
+- `npm run dev -w ui` — the UI alone against the local server (`/api` is proxied to :8787).
 - `npm run desktop` — the Tauri app against the Vite dev server.
 - `npm test` — unit tests (shared paths/ids, CLI flags + index, UI list logic, env allowlist).
 - `npm run smoke` — 66 end-to-end checks: setup handoff, write/version/replace, cross-machine
-  sync, worker auth, append-only keys, artifact serving.
+  sync, server auth, append-only keys, artifact serving.
 - `npm run typecheck` — strict TS across shared/cli/ui/web.
 
-## Deploy (Cloudflare Workers + Neon)
+## Deploy (Vercel + Neon)
 
-You need a Cloudflare account and a Postgres that a Worker can reach. Neon is the
+You need a Vercel account and a Postgres the function can reach. Neon is the
 path we test:
 
 ```bash
-# 1. database: a project, and its direct (not pooled) connection string
+# 1. database: a project, and its pooled connection string
 neon projects create --name shelf --region-id aws-us-east-1   # add --org-id if you have several orgs
-neon connection-string --project-id <project-id>              # pooled is off by default
+neon connection-string --project-id <project-id> --pooled
 
-# 2. Hyperdrive, which does the pooling itself, so give it the direct string
-npx wrangler hyperdrive create shelf-db --connection-string "postgres://..."
+# 2. the Vercel project, from the repository root
+vercel link --yes --project shelf
+
+# 3. its environment, then deploy
+vercel env add DATABASE_URL production --sensitive          # the pooled Neon URL
+vercel env add BETTER_AUTH_SECRET production --sensitive    # openssl rand -base64 32
+vercel env add ALLOWED_EMAILS production                    # you@example.com
+npm run deploy -w web                                       # vercel deploy --prod
 ```
 
-Paste the printed id into the `hyperdrive` block in `web/wrangler.jsonc`, and set
-`APP_URL` there to the origin you will actually serve from. A new Cloudflare
-account has no `workers.dev` name yet: open Workers & Pages once in the dashboard
-to claim one, and the origin becomes `https://<worker>.<name>.workers.dev`.
-
-```bash
-# 3. secrets, then deploy
-cd web
-npx wrangler secret put BETTER_AUTH_SECRET    # openssl rand -base64 32
-npx wrangler secret put ALLOWED_EMAILS        # you@example.com
-cd ..
-npm run build -w ui                           # `wrangler deploy` uploads ui/dist, it does not build it
-npm run deploy -w web
-```
+`vercel.json` builds the UI and bundles the server (`web/src/vercel.ts`) into one
+function, `api/index.mjs`, in `iad1`, next to Neon's `us-east-1`. The origin is the
+project's production domain, `https://<project>.vercel.app` or close to it; set
+`APP_URL` as well only to serve from another one. Changing `BETTER_AUTH_SECRET`
+later strands the MCP signing key in the `jwks` table: empty that table and the
+next connection mints a new one.
 
 Then run the schema and your account once. Pass the Neon URL inline instead of
 putting it in `web/.dev.vars`, so local development keeps using the local Postgres:
@@ -210,21 +208,21 @@ DATABASE_URL="$(neon connection-string --project-id <project-id>)" npm run db:mi
 DATABASE_URL="$(neon connection-string --project-id <project-id>)" npm run db:seed
 ```
 
-The Worker needs no `DATABASE_URL` secret: Hyperdrive is the binding, and
-database URLs stay out of the Worker's environment.
-
 Last, point a machine at it. This replaces whatever API the CLI was using, so a
 local development setup has to be re-authorized the same way afterwards:
 
 ```bash
-shelf setup --api https://shelf.<name>.workers.dev
+shelf setup --api https://<project>.vercel.app
 shelf sync                                    # the first sync uploads what this machine has
 ```
 
 To use the shelf from claude.ai, add a custom connector (Settings → Connectors) with the URL
-`https://shelf.<name>.workers.dev/mcp` and leave the OAuth fields empty. Connecting sends you to
+`https://<project>.vercel.app/mcp` and leave the OAuth fields empty. Connecting sends you to
 your shelf to sign in and allow it. `npm run db:migrate` creates the OAuth tables, so re-run it
 against production after upgrading.
+
+Local development runs the same routes in plain Node (`web/scripts/dev.ts`), and
+`npm run logs -w web` follows the production function's logs.
 
 ## Security notes
 
@@ -236,7 +234,7 @@ against production after upgrading.
 - MCP: OAuth 2.1 with PKCE through Better Auth's MCP plugin. Dynamic registration is open but
   limited to Claude's callbacks (`claude.ai`, `claude.com`, loopback for Claude Code), every
   connection needs your password and an explicit Allow, and access tokens are JWTs whose audience
-  is `<APP_URL>/mcp`, verified in the Worker against its own keys.
+  is `<APP_URL>/mcp`, verified by the server against its own keys.
 - Desktop artifacts are sandboxed in the reader iframe and served with
   `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'`.
   Inline scripts and styles work; CDNs, fonts and beacons do not.
@@ -249,7 +247,7 @@ against production after upgrading.
 cli/      the `shelf` CLI (TypeScript, bundled to a single file with esbuild)
 shared/   wire types, path/version rules, id hashing, machine colors
 ui/       the frontend used by both the desktop app and the PWA (vanilla TS, no framework)
-web/      Cloudflare Worker: Better Auth, /api, /cli handoff, /mcp + OAuth, PWA assets
+web/      the server (Vercel function): Better Auth, /api, /cli handoff, /mcp + OAuth, PWA assets
 desktop/  Tauri v2 app: CLI bridge, shelf:// reader protocol, deep links
 scripts/  dev-db, dev-all, smoke (+ smoke-mcp), icons
 ```

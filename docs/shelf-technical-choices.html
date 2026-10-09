@@ -675,11 +675,11 @@ fileId("mac-mini", "q3.html")
   <p class="kicker">Hosting</p>
   <h1>Cheap, programmable, and boring to operate.</h1>
   <div class="grid">
-    <article class="card"><h2>Cloudflare Worker</h2><p>One deployed unit serves the API, the auth pages and the PWA. Deploy is one command; there is no server to patch.</p></article>
+    <article class="card"><h2>Vercel function</h2><p>One deployed unit serves the API, the auth pages and the PWA. Deploy is one command; there is no server to patch.</p></article>
     <article class="card"><h2>Postgres on Neon</h2><p>One table, one text column for the HTML, capped at 5 MB per document.</p></article>
-    <article class="card"><h2>Hyperdrive in front</h2><p>Production uses <span class="mono">pg</span> over a pooled connection; local dev uses the same driver against a local Postgres, so both paths run identical SQL.</p></article>
+    <article class="card"><h2>Neon's pooler in front</h2><p>Production uses <span class="mono">pg</span> over Neon's pooled connection; local dev uses the same driver against a local Postgres, so both paths run identical SQL.</p></article>
   </div>
-  <div class="tail"><p class="callout">Push-back on the brief: Cloudflare D1 would remove a vendor and a config step. Postgres was kept because the data is worth more than the convenience.</p></div>
+  <div class="tail"><p class="callout">Push-back on the brief: a host-bundled database would remove a vendor and a config step. Postgres was kept because the data is worth more than the convenience.</p></div>
 </section>
 
 <section class="slide" id="slide-8">
@@ -702,7 +702,7 @@ fileId("mac-mini", "q3.html")
   <h1>What proves it works today.</h1>
   <div class="grid">
     <div class="stat"><b>35</b><span>unit tests across ids, paths, flags, index, UI logic</span></div>
-    <div class="stat"><b>30</b><span>end-to-end smoke checks against a local Worker + Postgres</span></div>
+    <div class="stat"><b>30</b><span>end-to-end smoke checks against a local server + Postgres</span></div>
     <div class="stat"><b>2</b><span>Rust tests for deep links and the CLI-backed reader</span></div>
   </div>
   <div class="tail">

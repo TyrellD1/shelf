@@ -1,6 +1,9 @@
 import { fileUrl, type ShelfFileMeta } from "@shelf/shared";
 import type { Env } from "./env.js";
 
+/** Keeps work alive after the response is sent (Vercel's `waitUntil`). */
+export type Defer = (work: Promise<unknown>) => void;
+
 /**
  * Posts a short "new on the shelf" message to Discord when a write adds a
  * file, whoever wrote it (CLI over REST, or claude.ai over MCP). Off unless

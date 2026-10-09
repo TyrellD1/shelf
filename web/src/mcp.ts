@@ -14,7 +14,7 @@ import { mcpResource, type Auth } from "./auth.js";
 import type { Database } from "./db.js";
 import type { Env } from "./env.js";
 import { listFiles, resolveFile, writeVersioned } from "./files.js";
-import { notifyNewFile } from "./notify.js";
+import { notifyNewFile, type Defer } from "./notify.js";
 
 /**
  * The shelf over MCP, for claude.ai: the document commands of the CLI
@@ -31,13 +31,13 @@ export async function handleMcp(
   env: Env,
   auth: Auth,
   db: Kysely<Database>,
-  ctx?: Pick<ExecutionContext, "waitUntil">,
+  defer: Defer,
 ): Promise<Response> {
   const resource = mcpResource(env.APP_URL);
   const caller = await verifiedCaller(request, env, auth, resource);
   if (!caller) return challenge(env);
 
-  const handler = createMcpHandler(() => createServer(env, db, caller, ctx), {
+  const handler = createMcpHandler(() => createServer(env, db, caller, defer), {
     responseMode: "json",
     onerror: (error) => console.error("shelf: mcp", error.message),
   });
@@ -60,7 +60,7 @@ async function verifiedCaller(
   const token = /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") ?? "")?.[1];
   if (!token) return null;
   try {
-    // Keys come straight from the database, so the Worker never fetches itself.
+    // Keys come straight from the database, so the server never fetches itself.
     const claims = await verifyJwsAccessToken(token, {
       jwksFetch: async () => auth.api.getJwks(),
       verifyOptions: { issuer: `${env.APP_URL}/api/auth`, audience: resource },
@@ -109,7 +109,7 @@ function createServer(
   env: Env,
   db: Kysely<Database>,
   { userId, clientId }: Caller,
-  ctx?: Pick<ExecutionContext, "waitUntil">,
+  defer: Defer,
 ): McpServer {
   const server = new McpServer(
     { name: "shelf", version: "1" },
@@ -197,7 +197,7 @@ function createServer(
       });
       if (!result.ok) return fail(result.error, result.message, result.hint);
       if (result.action === "created" || result.action === "versioned") {
-        ctx?.waitUntil(notifyNewFile(env, result.file));
+        defer(notifyNewFile(env, result.file));
       }
       return ok({
         action: result.action,

@@ -32,7 +32,7 @@ export async function setupCommand(args: ParsedArgs, output: Output): Promise<vo
     throw new UserError(
       "no API URL configured",
       "no_api_url",
-      "pass --api https://your-shelf.workers.dev (or set SHELF_API_URL)",
+      "pass --api https://your-shelf.vercel.app (or set SHELF_API_URL)",
     );
   }
 

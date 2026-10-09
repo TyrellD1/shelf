@@ -19,7 +19,7 @@ The work is in four passes: bugs, eyesores, delight, then verification.
 | 6 | Relative times freeze ("just now" forever) | Rows and the chip only render on data changes. | Polling re-renders. Rows are keyed by a signature that includes the displayed times, so an unchanged list isn't rebuilt (no hover or selection flicker). |
 | 7 | Returning from the reader loses your place | The list element is re-mounted and the scroll resets. | Save and restore scroll, and restore the selection to the document you opened. |
 | 8 | `/` from the reader doesn't focus search | Focus is attempted before the list is mounted. | Focus after routing. |
-| 9 | PWA search ignores machine names | The Worker matches only `path_on_machine`, but the CLI matches path **or** machine. That breaks the "surfaces never disagree" rule. | The Worker matches both. |
+| 9 | PWA search ignores machine names | The server matches only `path_on_machine`, but the CLI matches path **or** machine. That breaks the "surfaces never disagree" rule. | The server matches both. |
 | 10 | iOS zooms into the search field | The input is 13 px, and Safari zooms on anything under 16 px. | 16 px on coarse pointers. |
 | 11 | Toasts stack on top of each other | Each toast is appended at the same fixed spot. | One toast at a time; a new one replaces the old. |
 | 12 | An empty palette says "Loading…" forever | The empty-query plus empty-shelf case wasn't handled. | It says the shelf is empty. |
@@ -106,7 +106,7 @@ when a filter is on.
 
 **Contract:** `machine` on the wire is now one id **or several joined by commas**. That holds for
 `shelf list --machine a,b` and for `GET /api/files?machine=a,b`, both parsed by
-`parseMachineList` in `shared/`, so the CLI and the Worker share one rule. Machine ids can't
+`parseMachineList` in `shared/`, so the CLI and the server share one rule. Machine ids can't
 contain commas, so the format is unambiguous. There's no compatibility shim for older CLIs: both
 devices update together.
 
