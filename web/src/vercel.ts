@@ -1,4 +1,4 @@
-import { attachDatabasePool } from "@vercel/functions";
+import { attachDatabasePool, waitUntil } from "@vercel/functions";
 import { route, type Services } from "./app.js";
 import { createAuth } from "./auth.js";
 import { createDb, createPool } from "./db.js";
@@ -17,6 +17,7 @@ const env: Env = {
   BETTER_AUTH_SECRET: required("BETTER_AUTH_SECRET"),
   ALLOWED_EMAILS: process.env.ALLOWED_EMAILS,
   DATABASE_URL: required("DATABASE_URL"),
+  DISCORD_WEBHOOK_URL: process.env.DISCORD_WEBHOOK_URL,
 };
 
 let services: Services | undefined;
@@ -33,7 +34,7 @@ function getServices(): Services {
 
 export default {
   async fetch(request: Request): Promise<Response> {
-    const response = await route(request, env, getServices);
+    const response = await route(request, env, getServices, waitUntil);
     return response ?? new Response("Not found", { status: 404 });
   },
 };

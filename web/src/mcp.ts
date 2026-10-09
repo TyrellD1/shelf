@@ -14,6 +14,7 @@ import { mcpResource, type Auth } from "./auth.js";
 import type { Database } from "./db.js";
 import type { Env } from "./env.js";
 import { listFiles, resolveFile, writeVersioned } from "./files.js";
+import { notifyNewFile, type Defer } from "./notify.js";
 
 /**
  * The shelf over MCP, for claude.ai: the document commands of the CLI
@@ -30,12 +31,13 @@ export async function handleMcp(
   env: Env,
   auth: Auth,
   db: Kysely<Database>,
+  defer: Defer,
 ): Promise<Response> {
   const resource = mcpResource(env.APP_URL);
   const caller = await verifiedCaller(request, env, auth, resource);
   if (!caller) return challenge(env);
 
-  const handler = createMcpHandler(() => createServer(env, db, caller), {
+  const handler = createMcpHandler(() => createServer(env, db, caller, defer), {
     responseMode: "json",
     onerror: (error) => console.error("shelf: mcp", error.message),
   });
@@ -103,7 +105,12 @@ function challenge(env: Env): Response {
   );
 }
 
-function createServer(env: Env, db: Kysely<Database>, { userId, clientId }: Caller): McpServer {
+function createServer(
+  env: Env,
+  db: Kysely<Database>,
+  { userId, clientId }: Caller,
+  defer: Defer,
+): McpServer {
   const server = new McpServer(
     { name: "shelf", version: "1" },
     { instructions: `Shelf: ${SHELF_TAGLINE}. Files are addressed by id or path.` },
@@ -189,6 +196,9 @@ function createServer(env: Env, db: Kysely<Database>, { userId, clientId }: Call
         asNew,
       });
       if (!result.ok) return fail(result.error, result.message, result.hint);
+      if (result.action === "created" || result.action === "versioned") {
+        defer(notifyNewFile(env, result.file));
+      }
       return ok({
         action: result.action,
         ...(result.file.path !== result.requestedPath ? { requestedPath: result.requestedPath } : {}),

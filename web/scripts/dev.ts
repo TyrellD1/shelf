@@ -90,7 +90,7 @@ async function sendAsset(res: ServerResponse, pathname: string): Promise<void> {
 createServer(async (req, res) => {
   try {
     const request = toRequest(req);
-    const response = await route(request, env, getServices);
+    const response = await route(request, env, getServices, (work) => void work);
     if (response) await send(res, response);
     else await sendAsset(res, new URL(request.url).pathname);
   } catch (error) {

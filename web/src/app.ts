@@ -9,6 +9,7 @@ import { handleCliAuth } from "./cli-auth.js";
 import type { Database } from "./db.js";
 import type { Env } from "./env.js";
 import { handleMcp } from "./mcp.js";
+import type { Defer } from "./notify.js";
 import { handleOAuthPages } from "./oauth-pages.js";
 
 export interface Services {
@@ -34,24 +35,26 @@ const OPENID_METADATA = new Set([
 /**
  * Every route the server answers itself, for either host (`vercel.ts`, `scripts/dev.ts`).
  * Returns `null` for anything else, which the host serves from the built UI.
- * `services` is a thunk so a host can decide how long a pool and an auth instance live.
+ * `services` is a thunk so a host can decide how long a pool and an auth instance live;
+ * `defer` keeps background work (the Discord notification) alive past the response.
  */
 export async function route(
   request: Request,
   env: Env,
   services: () => Services,
+  defer: Defer,
 ): Promise<Response | null> {
   const path = new URL(request.url).pathname;
 
   try {
     if (path === "/api/health") {
       const { auth, db } = services();
-      return await handleApi(request, env, auth, db);
+      return await handleApi(request, env, auth, db, defer);
     }
 
     if (path === "/mcp") {
       const { auth, db } = services();
-      return await handleMcp(request, env, auth, db);
+      return await handleMcp(request, env, auth, db, defer);
     }
 
     if (AUTH_SERVER_METADATA.has(path)) {
@@ -83,7 +86,7 @@ export async function route(
 
     if (path.startsWith("/api/")) {
       const { auth, db } = services();
-      return await handleApi(request, env, auth, db);
+      return await handleApi(request, env, auth, db, defer);
     }
 
     if (path === "/cli" || path === "/cli/authorize") {

@@ -10,6 +10,7 @@ export interface ScriptEnv {
   SEED_EMAIL?: string;
   SEED_PASSWORD?: string;
   SEED_NAME?: string;
+  DISCORD_WEBHOOK_URL?: string;
 }
 
 /**
@@ -38,6 +39,7 @@ export function loadEnv(): ScriptEnv {
     SEED_EMAIL: process.env.SEED_EMAIL,
     SEED_PASSWORD: process.env.SEED_PASSWORD,
     SEED_NAME: process.env.SEED_NAME,
+    DISCORD_WEBHOOK_URL: process.env.DISCORD_WEBHOOK_URL,
   };
 
   if (!env.BETTER_AUTH_SECRET) {

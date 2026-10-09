@@ -20,6 +20,7 @@ import { credentialScope, type Auth } from "./auth.js";
 import type { Database } from "./db.js";
 import type { Env } from "./env.js";
 import { getFile, listFiles, metaSelect, sha256Hex, toIso, toMeta } from "./files.js";
+import { notifyNewFile, type Defer } from "./notify.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 200;
@@ -56,6 +57,7 @@ export async function handleApi(
   env: Env,
   auth: Auth,
   db: Kysely<Database>,
+  defer: Defer,
 ): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -289,6 +291,7 @@ export async function handleApi(
       created: true,
       replaced: false,
     };
+    defer(notifyNewFile(env, response.file));
     return json(response, 201);
   }
 
