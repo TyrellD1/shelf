@@ -26,7 +26,7 @@ const OPENID_METADATA = new Set([
 ]);
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -38,7 +38,7 @@ export default {
 
       if (path === "/mcp") {
         const db = createDb(env);
-        return await handleMcp(request, env, createAuth(env, db), db);
+        return await handleMcp(request, env, createAuth(env, db), db, ctx);
       }
 
       if (AUTH_SERVER_METADATA.has(path)) {
@@ -71,7 +71,7 @@ export default {
 
       if (path.startsWith("/api/")) {
         const db = createDb(env);
-        return await handleApi(request, env, createAuth(env, db), db);
+        return await handleApi(request, env, createAuth(env, db), db, ctx);
       }
 
       if (path === "/cli" || path === "/cli/authorize") {
